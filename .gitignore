@@ -1,0 +1,8 @@
+# compiled bytecode
+*.pyc
+
+# jupyter notebook
+*.ipynb_checkpoints
+
+# pycharm project directory
+*.idea
