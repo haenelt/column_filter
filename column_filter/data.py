@@ -8,18 +8,16 @@ __all__ = ['download_data']
 
 
 def download_data(dir_out):
-    """Download example data.
-    
-    This function downloads example data from my personal google drive [1]_ 
-    which enables you to directly test the code. Data is taken from a human 7 T 
-    fMRI study in which ocular dominance columns in the primary visual cortex 
-    were mapped using a high-resolution GE-EPI protocol. Further information
-    can be found in the readme which is stored with the other data files.
+    """Downloads example data from my personal google drive [1]_ which enables
+    you to directly test the code. Data is taken from a human 7 T fMRI study in
+    which ocular dominance columns in the primary visual cortex were mapped
+    using a high-resolution GE-EPI protocol. Further information can be found in
+    the readme which is stored with the other data files.
 
     Parameters
     ----------
     dir_out : str
-        Directory in which downloaded files are stored.
+        Directory into which downloaded files are stored.
 
     Raises
     ------
@@ -31,11 +29,16 @@ def download_data(dir_out):
     dict
         Dictionary with keys pointing to the location of the downloaded files.
 
-        * cortex : path to cortical surface mesh.
-        * inflated : path to inflated cortical surface mesh
-        * curv : path to curvature file
-        * contrast : path to contrast overlay
-        * label : path to V1 label file 
+        * cortex : str
+            Path to cortical surface mesh.
+        * inflated : str
+            Path to inflated cortical surface mesh
+        * curv : str
+            Path to curvature file
+        * contrast : str
+            Path to contrast overlay
+        * label : str
+            Path to V1 label file
     
     References
     ----------
@@ -83,4 +86,5 @@ def download_data(dir_out):
             'inflated': file_targets[1],
             'curv': file_targets[2],
             'contrast': file_targets[3],
-            'label': file_targets[4]}
+            'label': file_targets[4],
+            }

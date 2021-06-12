@@ -1,15 +1,18 @@
 # -*- coding: utf-8 -*-
 
 # external inputs
-import numpy as np
 from nibabel.freesurfer.io import read_geometry
 from nibabel.freesurfer.io import read_label
+#from gbb.neighbor import nn_2d
+#from gbb.normal import get_normal
+#from gbb.utils import get_adjm
+#from fmri_tools.surface import gradient
+#from fmri_tools.io import write_mgh
+import os
+import multiprocessing
+import numpy as np
 from surfdist.analysis import dist_calc
-from gbb.neighbor import nn_2d
-from gbb.normal import get_normal
-from gbb.utils import get_adjm
-from fmri_tools.surface import gradient
-from fmri_tools.io import write_mgh
+from joblib import Parallel, delayed
 
 
 def _rotation_matrix(f, t):
@@ -141,3 +144,113 @@ psi_real[label] = np.real(psi[label])
 psi_real[np.isnan(psi_real)] = 0
 
 write_mgh("/data/pt_01880/bla.mgh", psi_real)
+
+
+
+
+
+
+
+
+
+
+
+
+def dist_matrix(file_out, vtx, fac, label):
+    """Dist matrix.
+
+    This function creates a memory-mapped file which contains the distance
+    matrix from a connected region of interest on a triangular surface mesh.
+    The computation of matrix elements takes a while. Therefore, joblib is used
+    to execute the computation on all available CPUs in parallel.
+
+    Parameters
+    ----------
+    file_out : str
+        Filename of memory-mapped distance matrix.
+    vtx : (nvtx,3) np.ndarray
+        Array of vertex points.
+    fac : (nfac,3) np.ndarray
+        Array of corresponging faces.
+    label : (N,) np.ndarray
+        Array of label indices.
+
+    Raises
+    ------
+    FileExistsError
+        If `file_out` already exists.
+
+    Returns
+    -------
+    None.
+
+    """
+
+    # number of cores
+    num_cores = multiprocessing.cpu_count()
+
+    # check if file already exists
+    if os.path.exists(file_out):
+        raise FileExistsError("File already exists!")
+
+    # create output folder
+    if not os.path.exists(os.path.dirname(file_out)):
+        os.makedirs(os.path.dirname(file_out))
+
+    # create binary file
+    D = np.lib.format.open_memmap(file_out,
+                                  mode='w+',
+                                  dtype=np.float32,
+                                  shape=(len(label), len(label)),
+                                  )
+
+    # fill distance matrix
+    Parallel(n_jobs=num_cores)(
+        delayed(_map_array)(
+            i,
+            D,
+            label,
+            vtx,
+            fac) for i in range(len(label))
+    )
+
+
+def _map_array(i, D, label, vtx, fac):
+    """Map array.
+
+    This helper function computes nearest geodesic distances from index
+    label[n] to all other indices in the label array and write these distances
+    into row n and column n of the distance matrix.
+
+    Parameters
+    ----------
+    i : int
+        Position within label array.
+    D : (N,N) np.ndarray
+        Distance matrix.
+    label : (N,) np.ndarray
+        Array of label indices.
+    vtx : (nvtx,3) np.ndarray
+        Array of vertex points.
+    fac : (nfac,3) np.ndarray
+        Array of corresponding faces.
+
+    Returns
+    -------
+    None.
+
+    """
+
+    # compute geodesic distances
+    tmp = dist_calc((vtx, fac), label, label[i])
+    D[i:, i] = tmp[label[i:]]
+    D[i, i:] = tmp[label[i:]]
+
+    # print current status
+    loop_length = len(label)
+    counter = np.floor(i / loop_length * 100)
+    counter2 = np.floor((i - 1) / loop_length * 100)
+    if counter != counter2:
+        print("Loop status: " + str(counter) + " %")
+
+    del D

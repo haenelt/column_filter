@@ -1,1 +1,5 @@
+numpy==1.19.1
+nibabel==3.2.1
 gdown==3.13.0
+joblib==0.17.0
+surfdist==0.15.5
