@@ -18,5 +18,11 @@ class Mesh:
     def adjm(self):
         pass
 
+    def normal(self):
+        pass
+
+    def neighborhood(self):
+        pass
+
     def gradient(self):
         pass

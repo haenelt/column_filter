@@ -1,0 +1,20 @@
+notes
+---
+- nans and infs and zeroes
+- border
+- check dot product between normal and gradient
+- change normal and gradient code?
+- try out with dist2?
+- wavelength, orientation, threshold
+- truncate at e-1?
+- orientation as minimum distance to nearest vertex
+- faster
+- write output (optional)
+
+
+literature
+---
+- tortorici2018
+- masci2015
+- werghi2015
+
