@@ -9,7 +9,8 @@ notes
 - truncate at e-1?
 - orientation as minimum distance to nearest vertex
 - faster
-- write output (optional)
+- write output (optional, mgh and dataframe)
+- setup
 
 
 literature

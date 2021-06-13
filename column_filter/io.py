@@ -11,7 +11,7 @@ __all__ = ['load_mesh', 'load_overlay', 'load_roi', 'save_overlay']
 
 
 def load_mesh(file_in):
-    """Loads vertex coordinates and associated faces of surface mesh from file.
+    """Load vertex coordinates and associated faces of surface mesh from file.
     Currently, only meshs in freesurfer file format are supported.
 
     Parameters
@@ -30,9 +30,9 @@ def load_mesh(file_in):
         Dictionary collecting the output under the following keys
 
         * vtx : (N,3) np.ndarray
-            Array of vertex coordinates.
+            Vertex coordinates.
         * fac : (M,3) np.ndarray
-            Array of face indices.
+            Vertex indices of each triangle.
 
     """
 
@@ -48,7 +48,7 @@ def load_mesh(file_in):
 
 
 def load_overlay(file_in):
-    """Loads a surface overlay from file which contains one value per vertex.
+    """Load a surface overlay from file which contains one value per vertex.
     Currently, only overlays in freesurfer mgh format are supported.
 
     Parameters
@@ -98,7 +98,7 @@ def load_overlay(file_in):
 
 
 def load_roi(file_in):
-    """Loads vertex indices in region-of-interest (ROI) from file. Currently,
+    """Load vertex indices in region-of-interest (ROI) from file. Currently,
     only freesurfer label files are supported.
 
     Parameters
@@ -117,7 +117,7 @@ def load_roi(file_in):
         Dictionary collecting the output under the following keys
 
         * roi (N,) : np.ndarray
-            Array of vertex indices of ROI.
+            Array of vertex indices in ROI.
 
     """
 
@@ -131,7 +131,7 @@ def load_roi(file_in):
 
 
 def save_overlay(file_out, arr, affine=None, header=None):
-    """Writes a 1D array as surface overlay to disk. Currently, only overlays in
+    """Write a 1D array as surface overlay to disk. Currently, only overlays in
     freesurfer mgh format are supported.
 
     Parameters
