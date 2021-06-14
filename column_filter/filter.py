@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 
 import os
-import multiprocessing
 import numpy as np
 from numpy.linalg import norm
 from surfdist.analysis import dist_calc
 from joblib import Parallel, delayed
+from .mesh import Mesh
+from .config import NUM_CORES
 
 
 def _rotation_matrix(f, t):
@@ -132,9 +133,6 @@ def dist_matrix(file_out, vtx, fac, label):
 
     """
 
-    # number of cores
-    num_cores = multiprocessing.cpu_count()
-
     # check if file already exists
     if os.path.exists(file_out):
         raise FileExistsError("File already exists!")
@@ -151,7 +149,7 @@ def dist_matrix(file_out, vtx, fac, label):
                                   )
 
     # fill distance matrix
-    Parallel(n_jobs=num_cores)(
+    Parallel(n_jobs=NUM_CORES)(
         delayed(_map_array)(
             i,
             D,
@@ -227,40 +225,6 @@ def _map_array(i, D, label, vtx, fac):
 stuff to compute gradient
 """
 
-def _face_area(v, f):
-    """
-    Helper function to compute face areas.
-    """
-
-    # indexed view into the vertex array
-    tris = v[f]
-
-    A = np.cross(tris[::, 1] - tris[::, 0], tris[::, 2] - tris[::, 0])
-    A = norm(A, axis=1)
-    A /= 2
-
-    return A
-
-
-def _face_normal(v, f):
-    """
-    Helper function to compute face-wise normals.
-    """
-
-    # indexed view into the vertex array
-    tris = v[f]
-
-    # calculate the normal for all triangles by taking the cross product of
-    # the vectors v1-v0 and v2-v0 in each triangle
-    n = np.cross(tris[::, 1] - tris[::, 0], tris[::, 2] - tris[::, 0])
-    n_norm = norm(n, axis=1)
-
-    # normalize
-    n[:, 0] /= n_norm
-    n[:, 1] /= n_norm
-    n[:, 2] /= n_norm
-
-    return n
 
 
 def _f2v(f, gf, a):
@@ -324,9 +288,9 @@ def gradient(vtx, fac, arr_scalar, normalize=True):
 
     """
 
-    # face areas and normals
-    arr_A = _face_area(vtx, fac)
-    arr_n = _face_normal(vtx, fac)
+    mesh = Mesh(vtx, fac)
+    arr_A = mesh.face_areas
+    arr_n = mesh.face_normals
 
     # face-wise gradient
     gf_ji = arr_scalar[fac[:, 1]] - arr_scalar[fac[:, 0]]

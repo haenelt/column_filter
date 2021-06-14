@@ -125,6 +125,29 @@ class Mesh:
 
         return n
 
+    @property
+    @functools.lru_cache
+    def face_areas(self):
+        """Triangle areas.
+
+        Returns
+        -------
+        n : (M,) np.ndarray
+            Array of face areas.
+
+        """
+
+        # indexed view into the vertex array
+        tris = self.vtx[self.fac]
+
+        # calculate the normal for all triangles by taking the cross product of
+        # the vectors v1-v0 and v2-v0 in each triangle and get face area from
+        # length
+        n = np.cross(tris[::, 1] - tris[::, 0], tris[::, 2] - tris[::, 0])
+        n = np.sqrt((n ** 2).sum(-1)) / 2
+
+        return n
+
     def neighborhood(self, ind):
         """Compute 1-ring neighborhood for one vertex.
 
@@ -150,6 +173,7 @@ class Mesh:
         res[:, 0] = arr[:, 0] / lens
         res[:, 1] = arr[:, 1] / lens
         res[:, 2] = arr[:, 2] / lens
+
         return res
 
     @staticmethod
