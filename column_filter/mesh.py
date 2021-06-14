@@ -95,7 +95,7 @@ class Mesh:
         # calculate the normal for all triangles by taking the cross product of
         # the vectors v1-v0 and v2-v0 in each triangle and normalize
         n = np.cross(tris[::, 1] - tris[::, 0], tris[::, 2] - tris[::, 0])
-        n = self._normalize_v3(n)
+        n = self._normalize(n)
 
         return n
 
@@ -120,8 +120,8 @@ class Mesh:
         n = self.face_normals
 
         # calculate vertex-wise normals from face normals and normalize
-        n = self._f2v(len(self.vtx), self.fac, n)
-        n = self._normalize_v3(n)
+        n = self._f2v(n)
+        n = self._normalize(n)
 
         return n
 
@@ -165,28 +165,29 @@ class Mesh:
 
         return self.adjm[ind, :].indices
 
+    def _f2v(self, nf_arr):
+        """Get average vertex-wise normal by adding up all face-wise normals
+        around vertex."""
+        nv_arr = np.zeros_like(self.vtx)
+        for i in range(len(self.fac)):
+            nv_arr[self.fac[i, 0], :] += nf_arr[i, :]
+            nv_arr[self.fac[i, 1], :] += nf_arr[i, :]
+            nv_arr[self.fac[i, 2], :] += nf_arr[i, :]
+
+        return nv_arr
+
     @staticmethod
-    def _normalize_v3(arr):
+    def _normalize(arr):
         """Normalize a numpy array of shape=(n,3) along axis=1."""
         lens = np.sqrt(arr[:, 0] ** 2 + arr[:, 1] ** 2 + arr[:, 2] ** 2)
+        lens[lens == 0] = np.nan
         res = np.zeros_like(arr)
         res[:, 0] = arr[:, 0] / lens
         res[:, 1] = arr[:, 1] / lens
         res[:, 2] = arr[:, 2] / lens
+        res[~np.isfinite(res)] = 0
 
         return res
-
-    @staticmethod
-    def _f2v(length, fac, nt):
-        """Get average vertex-wise normal by adding up all face-wise normals
-        around vertex."""
-        nv = np.zeros((length, 3))
-        for i in range(len(fac)):
-            nv[fac[i, 0], :] += nt[i, :]
-            nv[fac[i, 1], :] += nt[i, :]
-            nv[fac[i, 2], :] += nt[i, :]
-
-        return nv
 
     @property
     def vtx(self):

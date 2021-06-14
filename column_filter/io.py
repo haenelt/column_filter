@@ -5,9 +5,10 @@ import os
 import numpy as np
 import nibabel as nb
 from nibabel.freesurfer.mghformat import MGHHeader
-from nibabel.freesurfer.io import read_geometry, read_label
+from nibabel.freesurfer.io import read_geometry, write_geometry, read_label
 
-__all__ = ['load_mesh', 'load_overlay', 'load_roi', 'save_overlay']
+__all__ = ['load_mesh', 'load_overlay', 'load_roi', 'load_mmap', 'save_overlay',
+           'save_meshlines']
 
 
 def load_mesh(file_in):
@@ -113,11 +114,8 @@ def load_roi(file_in):
 
     Returns
     -------
-    dict
-        Dictionary collecting the output under the following keys
-
-        * roi (N,) : np.ndarray
-            Array of vertex indices in ROI.
+    (N,) np.ndarray
+        Array of vertex indices in ROI.
 
     """
 
@@ -125,9 +123,37 @@ def load_roi(file_in):
     if not isinstance(file_in, str):
         raise ValueError("File name must be a string!")
 
-    roi = read_label(file_in)
+    return read_label(file_in)
 
-    return {'roi': roi}
+
+def load_mmap(file_in):
+    """Load a memory-mapped array.
+
+    Parameters
+    ----------
+    file_in : str
+        File name of input file.
+
+    Raises
+    ------
+    ValueError
+        If `file_in` is not a string or has wrong file extension.
+
+    Returns
+    -------
+    np.memmap
+        Memory-mapped array.
+
+    """
+
+    # check filename
+    if isinstance(file_in, str):
+        if not file_in.endswith("npy"):
+            raise ValueError("Currently supported file format is npy.")
+    else:
+        raise ValueError("File name must be a string!")
+
+    return np.load(file_in, mmap_mode='r')
 
 
 def save_overlay(file_out, arr, affine=None, header=None):
@@ -182,3 +208,42 @@ def save_overlay(file_out, arr, affine=None, header=None):
     # write output
     output = nb.Nifti1Image(arr, affine, header)
     nb.save(output, file_out)
+
+
+def save_meshlines(file_out, vtx_start, vtx_end):
+    """Write a surface mesh of lines between start and end vertex coordinates to
+    disk. Currently, only meshs in freesurfer file format are supported.
+
+    Parameters
+    ----------
+    file_out : str
+        File name of output file.
+    vtx_start : ndarray
+        Array of meshline start points.
+    vtx_end : ndarray
+        Array of meshline end points.
+
+    Returns
+    -------
+    None.
+
+    """
+
+    # initialise face with line shape
+    f_new = np.array([-2, -1, -2])
+    f_iter = 2
+
+    v_res = []
+    f_res = []
+    for v1, v2 in zip(vtx_start, vtx_end):
+
+        # update vertex list
+        v_res.append(v1)
+        v_res.append(v2)
+
+        # update face list
+        f_new = [x + f_iter for x in f_new]
+        f_res.append(f_new)
+
+    # write output geometry
+    write_geometry(file_out, np.asarray(v_res), np.asarray(f_res))

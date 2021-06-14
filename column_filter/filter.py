@@ -7,6 +7,14 @@ from surfdist.analysis import dist_calc
 from joblib import Parallel, delayed
 from .mesh import Mesh
 from .config import NUM_CORES
+from tqdm import tqdm
+
+
+__all__ = ['Filter', 'dist_matrix']
+
+
+class Filter:
+    pass
 
 
 def _rotation_matrix(f, t):
@@ -138,8 +146,9 @@ def dist_matrix(file_out, vtx, fac, label):
         raise FileExistsError("File already exists!")
 
     # create output folder
-    if not os.path.exists(os.path.dirname(file_out)):
-        os.makedirs(os.path.dirname(file_out))
+    dir_out = os.path.dirname(file_out)
+    if not os.path.exists(dir_out):
+        os.makedirs(dir_out)
 
     # create binary file
     D = np.lib.format.open_memmap(file_out,
@@ -155,11 +164,11 @@ def dist_matrix(file_out, vtx, fac, label):
             D,
             label,
             vtx,
-            fac) for i in range(len(label))
+            fac) for i in tqdm(range(len(label)))
     )
 
 
-def _map_array(i, D, label, vtx, fac):
+def _map_array(i, d, label, vtx, fac):
     """Map array.
 
     This helper function computes nearest geodesic distances from index
@@ -170,7 +179,7 @@ def _map_array(i, D, label, vtx, fac):
     ----------
     i : int
         Position within label array.
-    D : (N,N) np.ndarray
+    d : (N,N) np.ndarray
         Distance matrix.
     label : (N,) np.ndarray
         Array of label indices.
@@ -187,17 +196,10 @@ def _map_array(i, D, label, vtx, fac):
 
     # compute geodesic distances
     tmp = dist_calc((vtx, fac), label, label[i])
-    D[i:, i] = tmp[label[i:]]
-    D[i, i:] = tmp[label[i:]]
+    d[i:, i] = tmp[label[i:]]
+    d[i, i:] = tmp[label[i:]]
 
-    # print current status
-    loop_length = len(label)
-    counter = np.floor(i / loop_length * 100)
-    counter2 = np.floor((i - 1) / loop_length * 100)
-    if counter != counter2:
-        print("Loop status: " + str(counter) + " %")
-
-    del D
+    del d
 
 
 
@@ -228,9 +230,7 @@ stuff to compute gradient
 
 
 def _f2v(f, gf, a):
-    """
-    Helper function to transform face- to vertex-wise expressions.
-    """
+    """Helper function to transform face- to vertex-wise expressions."""
     nv = np.max(f) + 1  # number of vertices
     nf = len(f)  # number of faces
     gv = np.zeros((nv, 3))
@@ -250,11 +250,20 @@ def _f2v(f, gf, a):
 
     return gv
 
+def _normalize(arr):
+    """Normalize a numpy array of shape=(n,3) along axis=1."""
+    lens = np.sqrt(arr[:, 0] ** 2 + arr[:, 1] ** 2 + arr[:, 2] ** 2)
+    lens[lens == 0] = np.nan
+    res = np.zeros_like(arr)
+    res[:, 0] = arr[:, 0] / lens
+    res[:, 1] = arr[:, 1] / lens
+    res[:, 2] = arr[:, 2] / lens
+    res[~np.isfinite(res)] = 0
 
-def gradient(vtx, fac, arr_scalar, normalize=True):
-    """ Gradient
+    return res
 
-    This function computes the vertex-wise gradient of a scalar field sampled
+def gradient(vtx, fac, arr_scalar):
+    """This function computes the vertex-wise gradient of a scalar field sampled
     on a triangular mesh. The calculation is taken from [1].
 
     Parameters
@@ -279,12 +288,6 @@ def gradient(vtx, fac, arr_scalar, normalize=True):
     -------
     .. [1] Mancinelli, C. et al. Gradient field estimation on triangle meshes.
     Eurographics Proceedings (2018).
-
-    Notes
-    -------
-    created by Daniel Haenelt
-    Date created: 25-08-2020
-    Last modified: 19-11-2020
 
     """
 
@@ -313,14 +316,15 @@ def gradient(vtx, fac, arr_scalar, normalize=True):
     gv_magn = norm(gv, axis=1)
 
     # normalize
-    if normalize:
-        gv_norm = norm(gv, axis=1)
-        gv_norm[gv_norm == 0] = np.nan
+    gv = _normalize(gv)
 
-        gv[:, 0] /= gv_norm
-        gv[:, 1] /= gv_norm
-        gv[:, 2] /= gv_norm
-        pole = np.argwhere(np.isnan(gv))[:, 0]
-        gv[pole, :] = 0
+    #gv_norm = norm(gv, axis=1)
+    #gv_norm[gv_norm == 0] = np.nan
+
+    #gv[:, 0] /= gv_norm
+    #gv[:, 1] /= gv_norm
+    #gv[:, 2] /= gv_norm
+    pole = np.argwhere(np.isnan(gv))[:, 0]
+    gv[pole, :] = 0
 
     return gv, gv_magn
