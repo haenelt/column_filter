@@ -123,7 +123,7 @@ def load_roi(file_in):
     if not isinstance(file_in, str):
         raise ValueError("File name must be a string!")
 
-    return read_label(file_in)
+    return np.sort(read_label(file_in))
 
 
 def load_mmap(file_in):

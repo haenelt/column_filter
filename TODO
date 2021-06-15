@@ -2,7 +2,6 @@ notes
 ---
 - nans and infs and zeroes
 - border
-- with inflated
 - check dot product between normal and gradient
 - change normal and gradient code?
 - wavelength, orientation, threshold

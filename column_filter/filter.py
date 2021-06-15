@@ -64,9 +64,7 @@ def _rotation_matrix(f, t):
 
 
 def _angle_between_vectors(v1, v2, n):
-    """Angle between vectors.
-
-    This helper function computes the angle between two 3D vectors in the range
+    """Helper function computes the angle between two 3D vectors in the range
     (-pi, +pi].
 
     Parameters
@@ -111,95 +109,7 @@ def _angle_between_vectors(v1, v2, n):
 
 
 
-def dist_matrix(file_out, vtx, fac, label):
-    """Dist matrix.
 
-    This function creates a memory-mapped file which contains the distance
-    matrix from a connected region of interest on a triangular surface mesh.
-    The computation of matrix elements takes a while. Therefore, joblib is used
-    to execute the computation on all available CPUs in parallel.
-
-    Parameters
-    ----------
-    file_out : str
-        Filename of memory-mapped distance matrix.
-    vtx : (nvtx,3) np.ndarray
-        Array of vertex points.
-    fac : (nfac,3) np.ndarray
-        Array of corresponging faces.
-    label : (N,) np.ndarray
-        Array of label indices.
-
-    Raises
-    ------
-    FileExistsError
-        If `file_out` already exists.
-
-    Returns
-    -------
-    None.
-
-    """
-
-    # check if file already exists
-    if os.path.exists(file_out):
-        raise FileExistsError("File already exists!")
-
-    # create output folder
-    dir_out = os.path.dirname(file_out)
-    if not os.path.exists(dir_out):
-        os.makedirs(dir_out)
-
-    # create binary file
-    D = np.lib.format.open_memmap(file_out,
-                                  mode='w+',
-                                  dtype=np.float32,
-                                  shape=(len(label), len(label)),
-                                  )
-
-    # fill distance matrix
-    Parallel(n_jobs=NUM_CORES)(
-        delayed(_map_array)(
-            i,
-            D,
-            label,
-            vtx,
-            fac) for i in tqdm(range(len(label)))
-    )
-
-
-def _map_array(i, d, label, vtx, fac):
-    """Map array.
-
-    This helper function computes nearest geodesic distances from index
-    label[n] to all other indices in the label array and write these distances
-    into row n and column n of the distance matrix.
-
-    Parameters
-    ----------
-    i : int
-        Position within label array.
-    d : (N,N) np.ndarray
-        Distance matrix.
-    label : (N,) np.ndarray
-        Array of label indices.
-    vtx : (nvtx,3) np.ndarray
-        Array of vertex points.
-    fac : (nfac,3) np.ndarray
-        Array of corresponding faces.
-
-    Returns
-    -------
-    None.
-
-    """
-
-    # compute geodesic distances
-    tmp = dist_calc((vtx, fac), label, label[i])
-    d[i:, i] = tmp[label[i:]]
-    d[i, i:] = tmp[label[i:]]
-
-    del d
 
 
 
@@ -274,8 +184,6 @@ def gradient(vtx, fac, arr_scalar):
         Corresponding faces.
     arr_scalar : ndarray
         Scalar field values per vertex.
-    normalize : bool, optional
-        Normalize gradient vectors. The default is True.
 
     Returns
     -------
@@ -328,3 +236,94 @@ def gradient(vtx, fac, arr_scalar):
     gv[pole, :] = 0
 
     return gv, gv_magn
+
+
+
+
+
+
+def dist_matrix(file_out, vtx, fac, roi):
+    """Create a memory-mapped file which contains the distance matrix from a
+    connected region of interest on a triangle surface mesh. The computation of
+    matrix elements takes a while. Therefore, joblib is used to execute the
+    computation in parallel.
+
+    Parameters
+    ----------
+    file_out : str
+        File name of output file.
+    vtx : (N,3) np.ndarray
+        Vertex coordinates.
+    fac : (M,3) np.ndarray
+        Vertex indices of each triangle.
+    roi : (U,) np.ndarray
+        Array of vertex indices in ROI.
+
+    Raises
+    ------
+    FileExistsError
+        If `file_out` already exists.
+
+    Returns
+    -------
+    None.
+
+    """
+
+    # check if file already exists
+    if os.path.exists(file_out):
+        raise FileExistsError("File already exists!")
+
+    # create output folder
+    dir_out = os.path.dirname(file_out)
+    if not os.path.exists(dir_out):
+        os.makedirs(dir_out)
+
+    # create binary file
+    d = np.lib.format.open_memmap(file_out,
+                                  mode='w+',
+                                  dtype=np.float32,
+                                  shape=(len(roi), len(roi)),
+                                  )
+
+    # fill distance matrix
+    Parallel(n_jobs=NUM_CORES)(
+        delayed(_map_array)(
+            i,
+            d,
+            vtx,
+            fac,
+            roi) for i in tqdm(range(len(roi)))
+    )
+
+
+def _map_array(i, d, vtx, fac, roi):
+    """Helper function to compute nearest geodesic distances from index roi[n]
+    to all other indices in roi. Distances are written into row n and column n
+    of the distance matrix.
+
+    Parameters
+    ----------
+    i : int
+        Element in roi array.
+    d : (N,N) np.ndarray
+        Distance matrix.
+    vtx : (N,3) np.ndarray
+        Vertex coordinates.
+    fac : (M,3) np.ndarray
+        Vertex indices of each triangle.
+    roi : (U,) np.ndarray
+        Array of vertex indices in ROI.
+
+    Returns
+    -------
+    None.
+
+    """
+
+    # compute geodesic distances
+    tmp = dist_calc((vtx, fac), roi, roi[i])
+    d[i:, i] = tmp[roi[i:]]
+    d[i, i:] = tmp[roi[i:]]
+
+    del d
