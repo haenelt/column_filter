@@ -169,10 +169,10 @@ class Mesh:
         """Get average vertex-wise normal by adding up all face-wise normals
         around vertex."""
         nv_arr = np.zeros_like(self.vtx)
-        for i in range(len(self.fac)):
-            nv_arr[self.fac[i, 0], :] += nf_arr[i, :]
-            nv_arr[self.fac[i, 1], :] += nf_arr[i, :]
-            nv_arr[self.fac[i, 2], :] += nf_arr[i, :]
+        for i, f in enumerate(self.fac):
+            nv_arr[f[0], :] += nf_arr[i, :]
+            nv_arr[f[1], :] += nf_arr[i, :]
+            nv_arr[f[2], :] += nf_arr[i, :]
 
         return nv_arr
 

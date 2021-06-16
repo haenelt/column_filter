@@ -5,7 +5,6 @@ notes
 - check dot product between normal and gradient
 - change normal and gradient code?
 - wavelength, orientation, threshold
-- truncate at e-1?
 - faster
 - write output (optional, mgh and dataframe)
 - setup
