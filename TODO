@@ -1,14 +1,10 @@
 notes
 ---
 - nans and infs and zeroes
-- border
-- check dot product between normal and gradient
-- change normal and gradient code?
-- wavelength, orientation, threshold
 - faster
+- standard parameters
+- fit
 - write output (optional, mgh and dataframe)
-- setup
-
 
 literature
 ---

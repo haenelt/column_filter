@@ -15,16 +15,69 @@ __all__ = ['Filter', 'dist_matrix']
 
 class Filter:
 
-    def __init__(self, vtx, fac, roi, arr, dist):
+    def __init__(self, vtx, fac, roi, dist):
         self.vtx = vtx
         self.fac = fac
         self.roi = roi
-        self.arr = arr
         self.dist = dist
 
-    def gradient(self, arr_s):
-        """This function computes the vertex-wise gradient of a scalar field sampled
-        on a triangular mesh. The calculation is taken from [1].
+        self.mesh = Mesh(self.vtx, self.fac)
+        self.n = self.mesh.vertex_normals
+
+        self.r = None
+        self.ang = None
+
+    def get_coordinates(self, i):
+        r = np.zeros(len(self.vtx))
+        r[self.roi] = self.dist[i]
+        src = self.roi[i]
+
+        g, _ = self._gradient(r)
+        v = self.vtx[self.mesh.neighborhood(src)[0], :] - self.vtx[src, :]
+        v /= np.linalg.norm(v)
+
+        ang = np.zeros(len(self.vtx))
+        for i in self.roi:
+            M = self._rotation_matrix(self.n[i], self.n[src])
+            gv1 = np.matmul(M, g[i])
+            ang[i] = self._angle_between_vectors(gv1, v, self.n[src])
+
+        r[np.isinf(r)] = 0
+
+        return r, ang
+
+    def generate_wavelet(self, r, ang, l=1.0, sigma=1, ori=0, phi=0):
+        """Wavelet."""
+        A = 1
+        k = 2 * np.pi / l
+        psi = A * np.exp(-r ** 2 / (2 * sigma ** 2)) * np.cos(
+            k * r * np.cos(ang + ori) + phi)
+
+        psi_real = np.zeros(len(self.vtx))
+        psi_real[self.roi] = psi[self.roi]
+        psi_hull = A * np.exp(-r ** 2 / (2 * sigma ** 2))
+        psi_real[psi_hull < 1 / np.exp(1)] = 0
+        psi_real[np.isnan(psi_real)] = 0
+
+        return psi_real
+
+    def fit(self):
+        pass
+
+        # for each vertex in roi
+        # generate wavelet for (1) spatial freq, (2) orientation, (3) phase
+        # convolve with array
+        # cache result
+        # save index, convolution, orientation, gradient direction
+        # save as dataframe
+
+    @staticmethod
+    def convolution(arr_kernel, arr):
+        return np.sum(arr_kernel * arr) / len(arr_kernel[arr_kernel != 0])
+
+    def _gradient(self, arr_s):
+        """This function computes the vertex-wise gradient of a scalar field
+        sampled on a triangular mesh. The calculation is taken from [1].
 
         Parameters
         ----------
@@ -40,8 +93,8 @@ class Filter:
 
         References
         -------
-        .. [1] Mancinelli, C. et al. Gradient field estimation on triangle meshes.
-        Eurographics Proceedings (2018).
+        .. [1] Mancinelli, C. et al. Gradient field estimation on triangle
+        meshes. Eurographics Proceedings (2018).
 
         """
 
@@ -80,15 +133,6 @@ class Filter:
 
         return gv, gv_magn
 
-    def wavelet(self):
-        pass
-
-    def fit(self):
-        pass
-
-    def _convolution(self):
-        pass
-
     def _f2v(self, gf, a):
         """Helper function to transform face- to vertex-wise expressions."""
         gv = np.zeros((len(self.vtx), 3))
@@ -101,6 +145,7 @@ class Filter:
             magn[f[0]] += a[i]
             magn[f[1]] += a[i]
             magn[f[2]] += a[i]
+
 
         gv[:, 0] /= magn
         gv[:, 1] /= magn
@@ -196,6 +241,57 @@ class Filter:
             ang *= -1
 
         return ang
+
+    @property
+    def vtx(self):
+        return self._vtx
+
+    @vtx.setter
+    def vtx(self, v):
+        v = np.asarray(v)
+        if v.ndim != 2 or np.shape(v)[1] != 3:
+            raise ValueError("Vertices have wrong shape!")
+
+        self._vtx = v
+
+    @property
+    def fac(self):
+        return self._fac
+
+    @fac.setter
+    def fac(self, f):
+        f = np.asarray(f)
+        if f.ndim != 2 or np.shape(f)[1] != 3:
+            raise ValueError("Vertices have wrong shape!")
+
+        if np.max(f) != len(self.vtx) - 1:
+            raise ValueError("Faces do not match vertex array!")
+
+        self._fac = f
+
+    @property
+    def roi(self):
+        return self._roi
+
+    @roi.setter
+    def roi(self, r):
+        r = np.asarray(r)
+        if r.ndim != 1:
+            raise ValueError("ROI array has wrong shape!")
+
+        self._roi = r
+
+    @property
+    def dist(self):
+        return self._dist
+
+    @dist.setter
+    def dist(self, d):
+        d = np.asarray(d)
+        if d.ndim != 2 or len(d[0]) != len(d[1]) or len(d[0]) != len(self.roi):
+            raise ValueError("Distance matrix has wrong shape!")
+
+        self._dist = d
 
 
 def dist_matrix(file_out, vtx, fac, roi):
