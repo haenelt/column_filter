@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
 
 import os
+import itertools
 import numpy as np
 from numpy.linalg import norm
 from surfdist.analysis import dist_calc
+from tqdm import tqdm
 from joblib import Parallel, delayed
 from .mesh import Mesh
-from .config import NUM_CORES
-from tqdm import tqdm
+from .config import NUM_CORES, wavelet_params
+import pandas as pd
 
 
 __all__ = ['Filter', 'dist_matrix']
@@ -28,48 +30,114 @@ class Filter:
         self.ang = None
 
     def get_coordinates(self, i):
+        """
+        ref -> masci2018
+        - lack of intrinsic order
+        - local coordinate system
+        :param i:
+        :return:
+        """
+
         r = np.zeros(len(self.vtx))
-        r[self.roi] = self.dist[i]
+        r[self.roi] = np.nan_to_num(self.dist[i])
         src = self.roi[i]
 
         g, _ = self._gradient(r)
         v = self.vtx[self.mesh.neighborhood(src)[0], :] - self.vtx[src, :]
         v /= np.linalg.norm(v)
 
-        ang = np.zeros(len(self.vtx))
-        for i in self.roi:
-            M = self._rotation_matrix(self.n[i], self.n[src])
-            gv1 = np.matmul(M, g[i])
-            ang[i] = self._angle_between_vectors(gv1, v, self.n[src])
+        n_target = np.zeros_like(self.n)
+        n_target[:, 0] = self.n[src, 0]
+        n_target[:, 1] = self.n[src, 1]
+        n_target[:, 2] = self.n[src, 2]
 
-        r[np.isinf(r)] = 0
+        v_target = np.zeros_like(self.vtx)
+        v_target[:, 0] = v[0]
+        v_target[:, 1] = v[1]
+        v_target[:, 2] = v[2]
 
-        return r, ang
+        m = self._rotation_matrix(self.n, n_target)
+        gv1 = np.einsum('...ij,...j', m, g)
+        ang = self._angle_between_vectors(gv1, v_target, n_target)
+
+        v0 = self.vtx[src]
+        v1 = v
+
+        return r, ang, v0, v1
 
     def generate_wavelet(self, r, ang, l=1.0, sigma=1, ori=0, phi=0):
-        """Wavelet."""
-        A = 1
-        k = 2 * np.pi / l
-        psi = A * np.exp(-r ** 2 / (2 * sigma ** 2)) * np.cos(
-            k * r * np.cos(ang + ori) + phi)
+        """Wavelet.
+
+        ref -> tortorici2018
+
+        """
+        psi = np.exp(-r ** 2 / (2 * sigma ** 2)) * np.cos(
+            2*np.pi / l * r * np.cos(ang + ori) + phi)
 
         psi_real = np.zeros(len(self.vtx))
         psi_real[self.roi] = psi[self.roi]
-        psi_hull = A * np.exp(-r ** 2 / (2 * sigma ** 2))
+        psi_hull = np.exp(-r ** 2 / (2 * sigma ** 2))
         psi_real[psi_hull < 1 / np.exp(1)] = 0
         psi_real[np.isnan(psi_real)] = 0
 
         return psi_real
 
-    def fit(self):
-        pass
+    def fit(self, arr, file_out=None, **params):
 
-        # for each vertex in roi
-        # generate wavelet for (1) spatial freq, (2) orientation, (3) phase
-        # convolve with array
-        # cache result
-        # save index, convolution, orientation, gradient direction
-        # save as dataframe
+        # set default arguments if no parameters are given
+        params = { **wavelet_params, **params }
+
+        res = Parallel(n_jobs=NUM_CORES)(
+            delayed(self._fit)(
+                i,
+                arr,
+                params,
+                ) for i in tqdm(range(len(self.roi[:10])))
+        )
+
+        res = np.asarray(res)
+
+        data = {
+            'ind': res[:, 0],
+            'v0': res[:, 1],
+            'v1': res[:, 2],
+            'y': res[:, 3],
+            'lambda': res[:, 4],
+            'ori': res[:, 5],
+            'phase': res[:, 6],
+        }
+
+        # create pandas dataframe
+        df = pd.DataFrame(data=data)
+
+        if file_out:
+
+            dir_out = os.path.dirname(file_out)
+            if not os.path.exists(dir_out):
+                os.makedirs(dir_out)
+
+            df.to_parquet(file_out, engine="pyarrow")
+
+        return df
+
+    def _fit(self, i, arr, params):
+        r, phi, v0, v1 = self.get_coordinates(i)
+        tmp = 0
+        wave = 0
+        ori = 0
+        phase = 0
+        for m, n, o in list(itertools.product(params['lambda'],
+                                              params['ori'],
+                                              params['phase'])):
+            y = self.generate_wavelet(r, phi, m, params['sigma'], n, o)
+            tmp2 = self.convolution(y, arr)
+            if tmp2 > tmp:
+                tmp = tmp2
+                wave = m
+                ori = n
+                phase = o
+
+        return [self.roi[i], v0, v1+v0, tmp, wave, ori, phase]
 
     @staticmethod
     def convolution(arr_kernel, arr):
@@ -128,24 +196,14 @@ class Filter:
         # normalize
         gv = self._normalize(gv)
 
-        pole = np.argwhere(np.isnan(gv))[:, 0]
-        gv[pole, :] = 0
-
         return gv, gv_magn
 
     def _f2v(self, gf, a):
         """Helper function to transform face- to vertex-wise expressions."""
-        gv = np.zeros((len(self.vtx), 3))
-        magn = np.zeros(len(self.vtx))
-        for i, f in enumerate(self.fac):
-            gv[f[0], :] += a[i] * gf[i, :]
-            gv[f[1], :] += a[i] * gf[i, :]
-            gv[f[2], :] += a[i] * gf[i, :]
-
-            magn[f[0]] += a[i]
-            magn[f[1]] += a[i]
-            magn[f[2]] += a[i]
-
+        vf = self.mesh.vfm
+        tmp = a[:, np.newaxis] * gf
+        gv = vf.dot(np.nan_to_num(tmp))
+        magn = vf.dot(np.nan_to_num(a))
 
         gv[:, 0] /= magn
         gv[:, 1] /= magn
@@ -162,7 +220,8 @@ class Filter:
         res[:, 0] = arr[:, 0] / lens
         res[:, 1] = arr[:, 1] / lens
         res[:, 2] = arr[:, 2] / lens
-        res[~np.isfinite(res)] = 0
+        res_sum = np.sum(res, axis=1)
+        res[~np.isfinite(res_sum), :] = 0
 
         return res
 
@@ -188,25 +247,30 @@ class Filter:
         -------
         .. [1] Moeller, T, et al. Efficiently building a matrix to rotate one vector
         to another, Journal of Graphics Tools 4(4), 1--3 (2018).
-        .. [2] https://math.stackexchange.com/questions/180418/calculate-rotation-
-        matrix-to-align-vector-a-to-vector-b-in-3d
+        .. [2] https://math.stackexchange.com/questions/180418/calculate-rotation-matrix-to-align-vector-a-to-vector-b-in-3d
 
         """
 
-        if not np.isclose(np.linalg.norm(f), 1):
-            raise ValueError("Source vector must be a unit vector!")
+        if not np.all(np.isclose(np.linalg.norm(f, axis=1), 1)):
+            raise ValueError("Source vectors must be a unit vectors!")
 
-        if not np.isclose(np.linalg.norm(t), 1):
-            raise ValueError("Target vector must be a unit vector!")
+        if not np.all(np.isclose(np.linalg.norm(t, axis=1), 1)):
+            raise ValueError("Target vectors must be a unit vectors!")
 
         v = np.cross(f, t)
-        c = np.dot(f, t)
+        c = np.einsum('ij,ij->i', f, t)  # dot product
+        c[c == 1] = np.nan  # set dot product to nan to opposing vectors since no h is not defined
         h = (1 - c) / (1 - c ** 2)
 
-        vx, vy, vz = v
+        vx = v[:, 0]
+        vy = v[:, 1]
+        vz = v[:, 2]
+
         rot = np.array([[c + h * vx ** 2, h * vx * vy - vz, h * vx * vz + vy],
                         [h * vx * vy + vz, c + h * vy ** 2, h * vy * vz - vx],
                         [h * vx * vz - vy, h * vy * vz + vx, c + h * vz ** 2]])
+
+        rot = np.moveaxis(rot, 2, 0)
 
         return rot
 
@@ -233,12 +297,14 @@ class Filter:
 
         # compute angle in the range [0, +pi]
         c = np.cross(v1, v2)
-        d = np.dot(v1, v2)
-        ang = np.arctan2(np.linalg.norm(c), d)
+        d = np.einsum('ij,ij->i', v1, v2)  # dot product
+        ang = np.arctan2(np.linalg.norm(c, axis=1), d)
 
         # set sign
-        if np.dot(n, c) < 0:
-            ang *= -1
+        ang_sign = np.einsum('ij,ij->i', n, c)  # dot product
+        ang_sign[ang_sign >= 0] = 1
+        ang_sign[ang_sign != 1] = -1
+        ang *= ang_sign
 
         return ang
 

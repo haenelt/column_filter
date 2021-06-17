@@ -30,3 +30,10 @@ print("-----------------------------------------------------------------------")
 print("Column filter "+"(v"+str(column_filter.__version__)+")")
 print("author: "+str(column_filter.__author__))
 print("-----------------------------------------------------------------------")
+
+
+# optional parameters
+# sigma
+# lambda
+# ori
+# phase

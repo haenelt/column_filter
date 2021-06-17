@@ -44,38 +44,63 @@ class Mesh:
 
         """
 
-        # get number of vertices and faces
+        # number of vertices
         nvtx = len(self.vtx)
-        nfac = len(self.fac)
 
         # initialise
         row = []
         col = []
 
         # get rows and columns of edges
-        row.extend([self.fac[i, 0] for i in range(nfac)])
-        col.extend([self.fac[i, 1] for i in range(nfac)])
+        row.extend(list(self.fac[:, 0]))
+        col.extend(list(self.fac[:, 1]))
 
-        row.extend([self.fac[i, 1] for i in range(nfac)])
-        col.extend([self.fac[i, 2] for i in range(nfac)])
+        row.extend(list(self.fac[:, 1]))
+        col.extend(list(self.fac[:, 2]))
 
-        row.extend([self.fac[i, 2] for i in range(nfac)])
-        col.extend([self.fac[i, 0] for i in range(nfac)])
+        row.extend(list(self.fac[:, 2]))
+        col.extend(list(self.fac[:, 0]))
 
         # make sure that all edges are symmetric
-        row.extend([self.fac[i, 1] for i in range(nfac)])
-        col.extend([self.fac[i, 0] for i in range(nfac)])
+        row.extend(list(self.fac[:, 1]))
+        col.extend(list(self.fac[:, 0]))
 
-        row.extend([self.fac[i, 2] for i in range(nfac)])
-        col.extend([self.fac[i, 1] for i in range(nfac)])
+        row.extend(list(self.fac[:, 2]))
+        col.extend(list(self.fac[:, 1]))
 
-        row.extend([self.fac[i, 0] for i in range(nfac)])
-        col.extend([self.fac[i, 2] for i in range(nfac)])
+        row.extend(list(self.fac[:, 0]))
+        col.extend(list(self.fac[:, 2]))
 
         # adjacency entries get value 1
         data = np.ones(len(row), dtype=np.int8)
 
         return csr_matrix((data, (row, col)), shape=(nvtx, nvtx))
+
+    @property
+    @functools.lru_cache
+    def vfm(self):
+        """Compute a sparse matrix of vertex-face associations. The matrix has
+        the size (nvertex, nface). For each vertex index, all associated faces
+        are listed.
+
+        Returns
+        -------
+        scipy.sparse.csr.csr_matrix
+            Sparse adjacency matrix.
+
+        """
+
+        # number of vertices and faces
+        nvtx = len(self.vtx)
+        nfac = len(self.fac)
+
+        row = np.hstack(self.fac.T)
+        col = np.tile(range(nfac), (1, 3)).squeeze()
+
+        # vertex-face associations get value 1
+        data = np.ones(len(row), dtype=np.int8)
+
+        return csr_matrix((data, (row, col)), shape=(nvtx, nfac))
 
     @property
     @functools.lru_cache
@@ -166,15 +191,9 @@ class Mesh:
         return self.adjm[ind, :].indices
 
     def _f2v(self, nf_arr):
-        """Get average vertex-wise normal by adding up all face-wise normals
-        around vertex."""
-        nv_arr = np.zeros_like(self.vtx)
-        for i, f in enumerate(self.fac):
-            nv_arr[f[0], :] += nf_arr[i, :]
-            nv_arr[f[1], :] += nf_arr[i, :]
-            nv_arr[f[2], :] += nf_arr[i, :]
+        """Helper function to transform face- to vertex-wise expressions."""
 
-        return nv_arr
+        return self.vfm.dot(nf_arr)
 
     @staticmethod
     def _normalize(arr):
@@ -185,7 +204,8 @@ class Mesh:
         res[:, 0] = arr[:, 0] / lens
         res[:, 1] = arr[:, 1] / lens
         res[:, 2] = arr[:, 2] / lens
-        res[~np.isfinite(res)] = 0
+        res_sum = np.sum(res, axis=1)
+        res[~np.isfinite(res_sum), :] = 0
 
         return res
 
