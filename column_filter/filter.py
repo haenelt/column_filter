@@ -65,22 +65,22 @@ class Filter:
 
         return r, ang, v0, v1
 
-    def generate_wavelet(self, r, ang, l=1.0, sigma=1, ori=0, phi=0):
+    def generate_wavelet(self, r, ang, sigma=1.0, l=1.0, ori=0):
         """Wavelet.
 
         ref -> tortorici2018
 
         """
-        psi = np.exp(-r ** 2 / (2 * sigma ** 2)) * np.cos(
-            2*np.pi / l * r * np.cos(ang + ori) + phi)
+        psi = np.exp(-r ** 2 / (2 * sigma ** 2)) * np.exp(
+            1j * 2*np.pi / l * r * np.cos(ang + ori))
 
-        psi_real = np.zeros(len(self.vtx))
-        psi_real[self.roi] = psi[self.roi]
         psi_hull = np.exp(-r ** 2 / (2 * sigma ** 2))
-        psi_real[psi_hull < 1 / np.exp(1)] = 0
-        psi_real[np.isnan(psi_real)] = 0
 
-        return psi_real
+        y = np.zeros(len(self.vtx), dtype='complex')
+        y[self.roi] = psi[self.roi]
+        y[psi_hull < 1 / np.exp(1)] = 0
+
+        return np.nan_to_num(y)
 
     def fit(self, arr, file_out=None, **params):
 
@@ -104,7 +104,6 @@ class Filter:
             'y': res[:, 3],
             'lambda': res[:, 4],
             'ori': res[:, 5],
-            'phase': res[:, 6],
         }
 
         # create pandas dataframe
@@ -125,19 +124,16 @@ class Filter:
         tmp = 0
         wave = 0
         ori = 0
-        phase = 0
-        for m, n, o in list(itertools.product(params['lambda'],
-                                              params['ori'],
-                                              params['phase'])):
-            y = self.generate_wavelet(r, phi, m, params['sigma'], n, o)
+        for m, n in list(itertools.product(params['lambda'],
+                                           params['ori'])):
+            y = self.generate_wavelet(r, phi, params['sigma'], m, n)
             tmp2 = self.convolution(y, arr)
             if tmp2 > tmp:
                 tmp = tmp2
                 wave = m
                 ori = n
-                phase = o
 
-        return [self.roi[i], v0, v1+v0, tmp, wave, ori, phase]
+        return [self.roi[i], v0, v1+v0, tmp, wave, ori]
 
     @staticmethod
     def convolution(arr_kernel, arr):

@@ -13,8 +13,13 @@ NUM_CORES = multiprocessing.cpu_count()
 # Wavelet parameters (Gabor filter)
 # ------------------------------------------------------------------------------
 # Parameter search space for wavelet fitting.
-wavelet_params = {'sigma': 5.0,  # sigma of gaussian
-                  'lambda': np.linspace(1.0, 5.0, 3),  # wavelength of cosine
-                  'ori': np.linspace(0, 2 * np.pi, 3),  # direction of cosine
-                  'phase': np.linspace(0, 2 * np.pi, 3),  # phase of cosine
+sigma = 2.0  # standard deviation of gaussian envelope
+n_lambda = 25  # number of spatial frequency steps
+n_theta = 12  # number of orientation steps
+lambda_min = 1.0  # smallest spatial frequency
+lambda_max = 5.0  # largest spatial frequency
+
+wavelet_params = {'sigma': sigma,
+                  'lambda': np.linspace(lambda_min, lambda_max, n_lambda),
+                  'ori': np.linspace(0, np.pi-np.pi/n_theta, n_theta),
                   }
