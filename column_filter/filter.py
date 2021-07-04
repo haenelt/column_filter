@@ -65,20 +65,22 @@ class Filter:
 
         return r, ang, v0, v1
 
-    def generate_wavelet(self, r, ang, sigma=1.0, l=1.0, ori=0):
+    def generate_wavelet(self, r, ang, sigma=1.0, length=1.0, ori=0):
         """Wavelet.
 
         ref -> tortorici2018
 
         """
-        psi = np.exp(-r ** 2 / (2 * sigma ** 2)) * np.exp(
-            1j * 2*np.pi / l * r * np.cos(ang + ori))
+        size = length ** 2 / (2 * sigma ** 2)
+        psi = np.exp(-r ** 2 / size) * np.exp(
+            1j * 2 * np.pi / length * r * np.cos(ang + ori))
 
-        psi_hull = np.exp(-r ** 2 / (2 * sigma ** 2))
+        if wavelet_params['hull'] is not None:
+            psi_hull = np.exp(-r ** 2 / size)
+            psi[psi_hull < wavelet_params['hull']] = 0
 
         y = np.zeros(len(self.vtx), dtype='complex')
         y[self.roi] = psi[self.roi]
-        y[psi_hull < 1 / np.exp(1)] = 0
 
         return np.nan_to_num(y)
 
