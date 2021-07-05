@@ -51,13 +51,13 @@ class Filter:
         self.ang = None
 
     def get_coordinates(self, i):
-        """Create local polar coordinates system on triangle mesh. Since the
-        triangular mesh lacks an intrinsic order, no global coordinate system
-        can be used without distorting the mesh. Therefore, the polar angle has
-        no global meaning. To compute the corresponding angle for distance
-        vertices, the orientation between normal vectors are compared. This is
-        a fast method but only results in correct angles in the local
-        neighboorhood of the source vertex if the mesh is curved.
+        """Create local polar coordinates system on the mesh. Since the triangle
+        mesh lacks an intrinsic order, no global coordinate system can be
+        used. [1] Therefore, the polar angle has no global meaning. To compute
+        the corresponding angle for distant vertices, the orientation between
+        normal vectors is compared. This is a fast method but only results in
+        correct angles in the local neighboorhood of the source vertex if the
+        mesh is curved.
 
         Parameters
         ----------
@@ -71,10 +71,10 @@ class Filter:
         ang : np.ndarray, shape=(N,)
             Polar angle.
         v0 : np.ndarray, shape=(3,)
-            Vertex coordinates of the origin of the coordinate system.
+            Vertex coordinates of the coordinate system origin.
         v1 : np.ndarray, shape=(3,)
-            Vertex coordinates pointing to one 1-ring neighbor to establish the
-            coordinate origin for ang.
+            Vertex coordinates pointing to one 1-ring neighbor for polar angle
+            coordinates.
 
         References
         -------
@@ -112,9 +112,9 @@ class Filter:
         return r, ang, v0, v1
 
     def generate_wavelet(self, r, ang, sigma=1.0, length=1.0, ori=0, hull=0.1):
-        """Complex-valued Gabor filter. The amplitude is set to 1 and the hull
-        scales with the wavelength to exhibit the number of side lobes at each
-        spatial frequency.
+        """Complex-valued Gabor filter. [1] The amplitude is set to 1 and the
+        hull scales with the wavelength to exhibit the same number of side lobes
+        for each spatial frequency.
 
         Parameters
         ----------
@@ -157,9 +157,9 @@ class Filter:
         return np.nan_to_num(y)
 
     def fit(self, arr, file_out=None, **params):
-        """Fit filter bank to data array in each point of the ROI. For each
-        point, the parameters for the wavelet with the highest response are
-        stored and saved as pandas dataframe.
+        """Fit filter bank to data array in ROI. For each point, the parameters
+        for the wavelet with the highest response are stored and saved as a
+        pandas dataframe.
 
         Parameters
         ----------
@@ -168,7 +168,7 @@ class Filter:
         file_out : str
             File name of saved pandas dataframe.
         params : dict
-            Further optional parameters to change default setting.
+            Further optional parameters to change default settings.
 
         Returns
         -------
@@ -210,7 +210,6 @@ class Filter:
         df = pd.DataFrame(data=data)
 
         if file_out:
-
             dir_out = os.path.dirname(file_out)
             if not os.path.exists(dir_out):
                 os.makedirs(dir_out)
@@ -221,7 +220,7 @@ class Filter:
 
     def _fit(self, i, arr, params):
         """Helper function used by .fit() to run the fitting procedure on
-        multiple CPUs in parallel.
+        multiple CPUs in parallel using joblib.
 
         Parameters
         ----------
@@ -230,7 +229,7 @@ class Filter:
         arr : np.ndarray, shape=(N,)
             Data array.
         params : dict
-            Further optional parameters to change default setting.
+            Further optional parameters to change default settings.
 
         Returns
         -------
@@ -240,19 +239,16 @@ class Filter:
         """
 
         r, phi, v0, v1 = self.get_coordinates(i)
-        tmp = 0
-        filt = 0
-        wave = 0
-        ori = 0
+        tmp = filt = wave = ori = 0
         for m, n in list(itertools.product(params['lambda'],
                                            params['ori'])):
             y = self.generate_wavelet(r, phi, params['sigma'], m, n,
                                       params['hull'])
-            tmp2 = self.convolution(y, arr)
-            tmp2_abs = np.abs(tmp2)
-            if tmp2_abs > tmp:
-                tmp = tmp2_abs
-                filt = tmp2
+            y_conv = self.convolution(y, arr)
+            tmp2 = np.abs(y_conv)
+            if tmp2 > tmp:
+                tmp = tmp2
+                filt = y_conv
                 wave = m
                 ori = n
 
@@ -288,7 +284,7 @@ class Filter:
         Parameters
         ----------
         arr_s : np.ndarray, shape=(N,)
-            Scalar field values per vertex.
+            Vertex-wose scalar field.
 
         Returns
         -------
@@ -337,7 +333,7 @@ class Filter:
         return gv, gv_magn
 
     def _f2v(self, gf, a):
-        """Transform face- to vertex-wise expressions.
+        """Transform face- to vertex-wise expression.
 
         Parameters
         ----------
@@ -528,8 +524,7 @@ class Filter:
 def dist_matrix(file_out, vtx, fac, roi):
     """Create a memory-mapped file which contains the distance matrix from a
     connected region of interest on a triangle surface mesh. The computation of
-    matrix elements takes a while. Therefore, joblib is used to execute the
-    computation in parallel.
+    matrix elements takes a while.
 
     Parameters
     ----------
@@ -581,9 +576,10 @@ def dist_matrix(file_out, vtx, fac, roi):
 
 
 def _map_array(i, d, vtx, fac, roi):
-    """Compute nearest geodesic distances from index roi[n] to all other indices
-    in roi. Distances are written into row n and column n of the distance
-    matrix.
+    """Helper function used by dist_matrix() to run the geodesic distance
+    calculation on multiple CPUs in parallel using joblib. The geodesic distance
+    from index roi[i] to all other indices in roi is computed. Distances are
+    then written into row i and column i of the memory-mapped distance matrix.
 
     Parameters
     ----------

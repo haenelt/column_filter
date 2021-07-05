@@ -191,7 +191,7 @@ class Mesh:
         return self.adjm[ind, :].indices
 
     def _f2v(self, nf_arr):
-        """Transform face- to vertex-wise expressions.
+        """Transform face- to vertex-wise expression.
 
         Parameters
         ----------
