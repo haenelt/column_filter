@@ -14,14 +14,16 @@ NUM_CORES = multiprocessing.cpu_count()
 # ------------------------------------------------------------------------------
 # Parameter search space for wavelet fitting.
 sigma = 1.0  # standard deviation of gaussian envelope
-n_lambda = 25  # number of spatial frequency steps
+n_lambda = 16  # number of wavelengths
 n_theta = 12  # number of orientation steps
-lambda_min = 1.0  # smallest spatial frequency
-lambda_max = 5.0  # largest spatial frequency
+lambda_min = 1.0  # smallest wavelength
+lambda_max = 8.0  # largest wavelength
 hull_min = 0.1  # cutoff value of gaussian hull
 
 wavelet_params = {'sigma': sigma,
-                  'lambda': np.linspace(lambda_min, lambda_max, n_lambda),
+                  'lambda': np.logspace(np.log(lambda_min),
+                                        np.log(lambda_max),
+                                        n_lambda, base=np.e),
                   'ori': np.linspace(0, np.pi-np.pi/n_theta, n_theta),
                   'hull': hull_min,
                   }

@@ -4,13 +4,13 @@
 import os
 import itertools
 import numpy as np
+import pandas as pd
 from numpy.linalg import norm
 from surfdist.analysis import dist_calc
 from tqdm import tqdm
 from joblib import Parallel, delayed
 from .mesh import Mesh
 from .config import NUM_CORES, wavelet_params
-import pandas as pd
 
 __all__ = ['Filter', 'dist_matrix']
 
@@ -158,27 +158,28 @@ class Filter:
 
     def fit(self, arr, file_out=None, **params):
         """Fit filter bank to data array in ROI. For each point, the parameters
-        for the wavelet with the highest response are stored and saved as a
-        pandas dataframe.
+        for the wavelet with the highest response are stored in a pandas
+        dataframe.
 
         Parameters
         ----------
         arr : np.ndarray, shape=(N,)
             Data array.
         file_out : str
-            File name of saved pandas dataframe.
+            File name of saved pandas dataframe in apache parquet format.
         params : dict
             Further optional parameters to change default settings.
 
         Returns
         -------
-        dict
-            Dictionary collecting the output under the following keys
+        pd.DataFrame
+            DataFrame collecting the output under the following columns
 
             * ind (U,) : Vertex index.
             * v0 (U,3) : Vertex.
             * v1 (U,3) : Neighbor Vertex for spanning the coordinate system.
-            * y (U,) : Filtered response (complex-valued).
+            * y_real (U,) : Real part of filtered response.
+            * y_imag (U,) : Imaginary part of filtered response.
             * lambda (U,) : Best wavelength.
             * ori (U,) : Best orientation.
 
@@ -192,18 +193,17 @@ class Filter:
                 i,
                 arr,
                 params,
-                ) for i in tqdm(range(len(self.roi)))
+                ) for i in tqdm(range(len(self.roi[:10])))
         )
 
-        res = np.asarray(res)
-
         data = {
-            'ind': res[:, 0],
-            'v0': res[:, 1],
-            'v1': res[:, 2],
-            'y': res[:, 3],
-            'lambda': res[:, 4],
-            'ori': res[:, 5],
+            'ind': [res[i][0] for i, _ in enumerate(res)],
+            'v0': [res[i][1] for i, _ in enumerate(res)],
+            'v1': [res[i][2] for i, _ in enumerate(res)],
+            'y_real': [np.real(res[i][3]) for i, _ in enumerate(res)],
+            'y_imag': [np.imag(res[i][3]) for i, _ in enumerate(res)],
+            'lambda': [res[i][4] for i, _ in enumerate(res)],
+            'ori': [res[i][5] for i, _ in enumerate(res)],
         }
 
         # create pandas dataframe
@@ -220,7 +220,9 @@ class Filter:
 
     def _fit(self, i, arr, params):
         """Helper function used by .fit() to run the fitting procedure on
-        multiple CPUs in parallel using joblib.
+        multiple CPUs in parallel using joblib. Only parameter for the wavelet
+        with the largest response are returned which corresponds to a hard
+        thresholding procedure.
 
         Parameters
         ----------
