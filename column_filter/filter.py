@@ -193,7 +193,7 @@ class Filter:
                 i,
                 arr,
                 params,
-                ) for i in tqdm(range(len(self.roi[:10])))
+                ) for i in tqdm(range(len(self.roi)))
         )
 
         data = {
