@@ -1,21 +1,42 @@
 # -*- coding: utf-8 -*-
+"""Wavelet filtering."""
 
 import os
 import itertools
 import numpy as np
+import pandas as pd
 from numpy.linalg import norm
 from surfdist.analysis import dist_calc
 from tqdm import tqdm
 from joblib import Parallel, delayed
 from .mesh import Mesh
 from .config import NUM_CORES, wavelet_params
-import pandas as pd
-
 
 __all__ = ['Filter', 'dist_matrix']
 
 
 class Filter:
+    """Filter overlay on triangle surface mesh with a filter bank consisting of
+    complex-valued Gabor filters differing in spatial frequency and orientation.
+
+    Parameters
+    ----------
+    vtx : np.ndarray, shape=(N,3)
+        Vertex coordinates.
+    fac : np.ndarray, shape=(M,3)
+        Vertex indices of each triangle.
+    roi : np.ndarray, shape=(U,)
+        Array of vertex indices in ROI.
+    dist : np.memmap, shape=(U,U)
+        Memory-mapped geodesic distances for each ROI vertex to all other
+        vertices in ROI.
+
+    Raises
+    ------
+    ValueError :
+        If input parameters have inconsistent shapes.
+
+    """
 
     def __init__(self, vtx, fac, roi, dist):
         self.vtx = vtx
@@ -30,12 +51,37 @@ class Filter:
         self.ang = None
 
     def get_coordinates(self, i):
-        """
-        ref -> masci2018
-        - lack of intrinsic order
-        - local coordinate system
-        :param i:
-        :return:
+        """Create local polar coordinates system on the mesh. Since the triangle
+        mesh lacks an intrinsic order, no global coordinate system can be
+        used. [1] Therefore, the polar angle has no global meaning. To compute
+        the corresponding angle for distant vertices, the orientation between
+        normal vectors is compared. This is a fast method but only results in
+        correct angles in the local neighboorhood of the source vertex if the
+        mesh is curved.
+
+        Parameters
+        ----------
+        i : int
+            Array index in ROI.
+
+        Returns
+        -------
+        r : np.ndarray, shape=(N,)
+            Geodesic distance to origin.
+        ang : np.ndarray, shape=(N,)
+            Polar angle.
+        v0 : np.ndarray, shape=(3,)
+            Vertex coordinates of the coordinate system origin.
+        v1 : np.ndarray, shape=(3,)
+            Vertex coordinates pointing to one 1-ring neighbor for polar angle
+            coordinates.
+
+        References
+        -------
+        .. [1] Masci, J. et al. Geodesic convolutional neural networks on
+        Riemannian manifolds. Proc. - 2015 Int. Conf. Comput. Vis. Workshop
+        ICCVW (2015).
+
         """
 
         r = np.zeros(len(self.vtx))
@@ -65,27 +111,82 @@ class Filter:
 
         return r, ang, v0, v1
 
-    def generate_wavelet(self, r, ang, sigma=1.0, l=1.0, ori=0):
-        """Wavelet.
+    def generate_wavelet(self, r, ang, sigma=1.0, length=1.0, ori=0, hull=0.1):
+        """Complex-valued Gabor filter. [1] The amplitude is set to 1 and the
+        hull scales with the wavelength to exhibit the same number of side lobes
+        for each spatial frequency.
 
-        ref -> tortorici2018
+        Parameters
+        ----------
+        r : np.ndarray, shape=(N,)
+            Geodesic distance to origin.
+        ang : np.ndarray, shape=(N,)
+            Polar angle.
+        sigma : float
+            Standard deviation of the gaussian hull.
+        length : float
+            Wavelength of the sinusoidal oscillation.
+        ori : float
+            Orientation of the sinusoidal oscillation (rad).
+        hull : float
+            Cutoff value of gaussian hull.
+
+        Returns
+        -------
+        np.ndarray, shape=(N,)
+            Gabor wavelet.
+
+        References
+        -------
+        .. [1] Tortorici, C. et al. Performing Image-like Convolution on
+        Triangular Meshes. Eurogr. Workshop 3D Object Retr. EG 3DOR (2018).
 
         """
-        psi = np.exp(-r ** 2 / (2 * sigma ** 2)) * np.exp(
-            1j * 2*np.pi / l * r * np.cos(ang + ori))
 
-        psi_hull = np.exp(-r ** 2 / (2 * sigma ** 2))
+        size = length ** 2 / (2 * sigma ** 2)
+        psi = np.exp(-r ** 2 / size) * np.exp(
+            1j * 2 * np.pi / length * r * np.cos(ang + ori))
+
+        if hull is not None:
+            psi_hull = np.exp(-r ** 2 / size)
+            psi[psi_hull < hull] = 0
 
         y = np.zeros(len(self.vtx), dtype='complex')
         y[self.roi] = psi[self.roi]
-        y[psi_hull < 1 / np.exp(1)] = 0
 
         return np.nan_to_num(y)
 
     def fit(self, arr, file_out=None, **params):
+        """Fit filter bank to data array in ROI. For each point, the parameters
+        for the wavelet with the highest response are stored in a pandas
+        dataframe.
+
+        Parameters
+        ----------
+        arr : np.ndarray, shape=(N,)
+            Data array.
+        file_out : str
+            File name of saved pandas dataframe in apache parquet format.
+        params : dict
+            Further optional parameters to change default settings.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame collecting the output under the following columns
+
+            * ind (U,) : Vertex index.
+            * v0 (U,3) : Vertex.
+            * v1 (U,3) : Neighbor Vertex for spanning the coordinate system.
+            * y_real (U,) : Real part of filtered response.
+            * y_imag (U,) : Imaginary part of filtered response.
+            * lambda (U,) : Best wavelength.
+            * ori (U,) : Best orientation.
+
+        """
 
         # set default arguments if no parameters are given
-        params = { **wavelet_params, **params }
+        params = {**wavelet_params, **params}
 
         res = Parallel(n_jobs=NUM_CORES)(
             delayed(self._fit)(
@@ -95,22 +196,20 @@ class Filter:
                 ) for i in tqdm(range(len(self.roi[:10])))
         )
 
-        res = np.asarray(res)
-
         data = {
-            'ind': res[:, 0],
-            'v0': res[:, 1],
-            'v1': res[:, 2],
-            'y': res[:, 3],
-            'lambda': res[:, 4],
-            'ori': res[:, 5],
+            'ind': [res[i][0] for i, _ in enumerate(res)],
+            'v0': [res[i][1] for i, _ in enumerate(res)],
+            'v1': [res[i][2] for i, _ in enumerate(res)],
+            'y_real': [np.real(res[i][3]) for i, _ in enumerate(res)],
+            'y_imag': [np.imag(res[i][3]) for i, _ in enumerate(res)],
+            'lambda': [res[i][4] for i, _ in enumerate(res)],
+            'ori': [res[i][5] for i, _ in enumerate(res)],
         }
 
         # create pandas dataframe
         df = pd.DataFrame(data=data)
 
         if file_out:
-
             dir_out = os.path.dirname(file_out)
             if not os.path.exists(dir_out):
                 os.makedirs(dir_out)
@@ -120,39 +219,80 @@ class Filter:
         return df
 
     def _fit(self, i, arr, params):
-        r, phi, v0, v1 = self.get_coordinates(i)
-        tmp = 0
-        wave = 0
-        ori = 0
-        for m, n in list(itertools.product(params['lambda'],
-                                           params['ori'])):
-            y = self.generate_wavelet(r, phi, params['sigma'], m, n)
-            tmp2 = self.convolution(y, arr)
-            if tmp2 > tmp:
-                tmp = tmp2
-                wave = m
-                ori = n
-
-        return [self.roi[i], v0, v1+v0, tmp, wave, ori]
-
-    @staticmethod
-    def convolution(arr_kernel, arr):
-        return np.sum(arr_kernel * arr) / len(arr_kernel[arr_kernel != 0])
-
-    def _gradient(self, arr_s):
-        """This function computes the vertex-wise gradient of a scalar field
-        sampled on a triangular mesh. The calculation is taken from [1].
+        """Helper function used by .fit() to run the fitting procedure on
+        multiple CPUs in parallel using joblib. Only parameter for the wavelet
+        with the largest response are returned which corresponds to a hard
+        thresholding procedure.
 
         Parameters
         ----------
-        arr_s : ndarray
-            Scalar field values per vertex.
+        i : int
+            Array index in ROI.
+        arr : np.ndarray, shape=(N,)
+            Data array.
+        params : dict
+            Further optional parameters to change default settings.
 
         Returns
         -------
-        gv : ndarray
+        list
+            Output for one array index.
+
+        """
+
+        r, phi, v0, v1 = self.get_coordinates(i)
+        tmp = filt = wave = ori = 0
+        for m, n in list(itertools.product(params['lambda'],
+                                           params['ori'])):
+            y = self.generate_wavelet(r, phi, params['sigma'], m, n,
+                                      params['hull'])
+            y_conv = self.convolution(y, arr)
+            tmp2 = np.abs(y_conv)
+            if tmp2 > tmp:
+                tmp = tmp2
+                filt = y_conv
+                wave = m
+                ori = n
+
+        return [self.roi[i], v0, v1+v0, filt, wave, ori]
+
+    @staticmethod
+    def convolution(arr_kernel, arr):
+        """Convolve array with one kernel. The kernel is not shifted along the
+        array. Therefore, the output is not the array convolved with the kernel
+        array but just the result after applying one particular kernel to the
+        array.
+
+        Parameters
+        ----------
+        arr_kernel : np.ndarray, shape=(N,)
+            Kernel array.
+        arr : np.ndarray, shape=(N,)
+            Data array.
+
+        Returns
+        -------
+        float
+            Filtered data point
+
+        """
+
+        return np.sum(arr_kernel * arr) / len(arr_kernel[arr_kernel != 0])
+
+    def _gradient(self, arr_s):
+        """Compute vertex-wise gradients of a scalar field sampled on a
+        triangular mesh. The calculation is taken from [1].
+
+        Parameters
+        ----------
+        arr_s : np.ndarray, shape=(N,)
+            Vertex-wose scalar field.
+
+        Returns
+        -------
+        gv : np.ndarray, shape=(N,3)
             Vertex-wise gradient vector.
-        gv_magn : ndarray
+        gv_magn : np.ndarray, shape=(N,)
             Vertex-wise gradient magnitude.
 
         References
@@ -195,7 +335,22 @@ class Filter:
         return gv, gv_magn
 
     def _f2v(self, gf, a):
-        """Helper function to transform face- to vertex-wise expressions."""
+        """Transform face- to vertex-wise expression.
+
+        Parameters
+        ----------
+        gf : np.ndarray, shape=(M,3)
+            Face-wise gradients.
+        a : np.ndarray, shape=(M,)
+            Triangle areas.
+
+        Returns
+        -------
+        gv : np.ndarray, shape=(N,3)
+            Vertex-wise gradients.
+
+        """
+
         vf = self.mesh.vfm
         tmp = a[:, np.newaxis] * gf
         gv = vf.dot(np.nan_to_num(tmp))
@@ -209,7 +364,20 @@ class Filter:
 
     @staticmethod
     def _normalize(arr):
-        """Normalize a numpy array of shape=(n,3) along axis=1."""
+        """Normalize a numpy array of shape=(n,3) along axis=1.
+
+        Parameters
+        ----------
+        arr : np.ndarray, shape=(N,3)
+            Data array
+
+        Returns
+        -------
+        res : np.ndarray, shape=(N,3)
+            Normalized data array.
+
+        """
+
         lens = np.sqrt(arr[:, 0] ** 2 + arr[:, 1] ** 2 + arr[:, 2] ** 2)
         lens[lens == 0] = np.nan
         res = np.zeros_like(arr)
@@ -223,9 +391,9 @@ class Filter:
 
     @staticmethod
     def _rotation_matrix(f, t):
-        """This helper function computes a 3x3 rotation matrix that rotates a
-        unit vector f into another unit vector t. The algorithm is taken from
-        [1] and uses the implementation found in [2].
+        """Computes a 3x3 rotation matrix that rotates a unit vector f into
+        another unit vector t. The algorithm is taken from [1] and uses the
+        implementation found in [2].
 
         Parameters
         ----------
@@ -236,13 +404,13 @@ class Filter:
 
         Returns
         -------
-        rot : (3,3) np.ndarray
+        rot : np.ndarray, shape=(3,3)
             Rotation matrix.
 
         References
         -------
-        .. [1] Moeller, T, et al. Efficiently building a matrix to rotate one vector
-        to another, Journal of Graphics Tools 4(4), 1--3 (2018).
+        .. [1] Moeller, T, et al. Efficiently building a matrix to rotate one
+        vector to another, Journal of Graphics Tools 4(4), 1--3 (2018).
         .. [2] https://math.stackexchange.com/questions/180418/calculate-rotation-matrix-to-align-vector-a-to-vector-b-in-3d
 
         """
@@ -255,7 +423,7 @@ class Filter:
 
         v = np.cross(f, t)
         c = np.einsum('ij,ij->i', f, t)  # dot product
-        c[c == 1] = np.nan  # set dot product to nan to opposing vectors since no h is not defined
+        c[c == 1] = np.nan  # set to zero since h has a singularity there
         h = (1 - c) / (1 - c ** 2)
 
         vx = v[:, 0]
@@ -272,8 +440,7 @@ class Filter:
 
     @staticmethod
     def _angle_between_vectors(v1, v2, n):
-        """Helper function computes the angle between two 3D vectors in the
-        range (-pi, +pi].
+        """Compute the angle between two 3D vectors in the range (-pi, +pi].
 
         Parameters
         ----------
@@ -359,18 +526,17 @@ class Filter:
 def dist_matrix(file_out, vtx, fac, roi):
     """Create a memory-mapped file which contains the distance matrix from a
     connected region of interest on a triangle surface mesh. The computation of
-    matrix elements takes a while. Therefore, joblib is used to execute the
-    computation in parallel.
+    matrix elements takes a while.
 
     Parameters
     ----------
     file_out : str
         File name of output file.
-    vtx : (N,3) np.ndarray
+    vtx : np.ndarray, shape=(N,3)
         Vertex coordinates.
-    fac : (M,3) np.ndarray
+    fac : np.ndarray, shape=(M,3)
         Vertex indices of each triangle.
-    roi : (U,) np.ndarray
+    roi : np.ndarray, shape=(U,)
         Array of vertex indices in ROI.
 
     Raises
@@ -412,21 +578,22 @@ def dist_matrix(file_out, vtx, fac, roi):
 
 
 def _map_array(i, d, vtx, fac, roi):
-    """Helper function to compute nearest geodesic distances from index roi[n]
-    to all other indices in roi. Distances are written into row n and column n
-    of the distance matrix.
+    """Helper function used by dist_matrix() to run the geodesic distance
+    calculation on multiple CPUs in parallel using joblib. The geodesic distance
+    from index roi[i] to all other indices in roi is computed. Distances are
+    then written into row i and column i of the memory-mapped distance matrix.
 
     Parameters
     ----------
     i : int
         Element in roi array.
-    d : (N,N) np.ndarray
+    d : np.ndarray, shape=(N,N)
         Distance matrix.
-    vtx : (N,3) np.ndarray
+    vtx : np.ndarray, shape=(N,3)
         Vertex coordinates.
-    fac : (M,3) np.ndarray
+    fac : np.ndarray, shape=(M,3)
         Vertex indices of each triangle.
-    roi : (U,) np.ndarray
+    roi : np.ndarray, shape=(U,)
         Array of vertex indices in ROI.
 
     Returns

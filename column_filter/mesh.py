@@ -14,9 +14,9 @@ class Mesh:
 
     Parameters
     ----------
-    vtx : (N,3) np.ndarray
+    vtx : np.ndarray, shape=(N,3)
         Vertex coordinates.
-    fac : (M,3) np.ndarray
+    fac : np.ndarray, shape=(M,3)
         Vertex indices of each triangle.
 
     Raises
@@ -109,7 +109,7 @@ class Mesh:
 
         Returns
         -------
-        n : (M,) np.ndarray
+        n : np.ndarray, shape=(M,3)
             Array of face-wise normal vectors.
 
         """
@@ -132,7 +132,7 @@ class Mesh:
 
         Returns
         -------
-        norm : (N,) np.ndarray
+        norm : np.ndarray, shape=(N,)
             Array of vertex-wise normal vectors.
 
         References
@@ -157,7 +157,7 @@ class Mesh:
 
         Returns
         -------
-        n : (M,) np.ndarray
+        n : np.ndarray, shape=(M,)
             Array of face areas.
 
         """
@@ -183,7 +183,7 @@ class Mesh:
 
         Returns
         -------
-        (N,) np.ndarray
+        np.ndarray, shape=(N,)
             Array of neighborhood indices.
 
         """
@@ -191,13 +191,38 @@ class Mesh:
         return self.adjm[ind, :].indices
 
     def _f2v(self, nf_arr):
-        """Helper function to transform face- to vertex-wise expressions."""
+        """Transform face- to vertex-wise expression.
+
+        Parameters
+        ----------
+        nf_arr : np.ndarray, shape=(M,3)
+            Face-wise array.
+
+        Returns
+        -------
+        np.ndarray, shape=(N,3)
+            Vertex-wise array.
+
+        """
 
         return self.vfm.dot(nf_arr)
 
     @staticmethod
     def _normalize(arr):
-        """Normalize a numpy array of shape=(n,3) along axis=1."""
+        """Normalize a numpy array of shape=(n,3) along axis=1.
+
+        Parameters
+        ----------
+        arr : np.ndarray, shape=(N,3)
+            Data array
+
+        Returns
+        -------
+        res : np.ndarray, shape=(N,3)
+            Normalized data array.
+
+        """
+
         lens = np.sqrt(arr[:, 0] ** 2 + arr[:, 1] ** 2 + arr[:, 2] ** 2)
         lens[lens == 0] = np.nan
         res = np.zeros_like(arr)

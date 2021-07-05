@@ -30,9 +30,9 @@ def load_mesh(file_in):
     dict
         Dictionary collecting the output under the following keys
 
-        * vtx : (N,3) np.ndarray
+        * vtx : np.ndarray, shape=(N,3)
             Vertex coordinates.
-        * fac : (M,3) np.ndarray
+        * fac : np.ndarray, shape=(M,3)
             Vertex indices of each triangle.
 
     """
@@ -68,9 +68,9 @@ def load_overlay(file_in):
     dict
         Dictionary collecting the output under the following keys
 
-        * arr : (N,) np.ndarray
+        * arr : np.ndarray, shape=(N,)
             Overlay data.
-        * affine (4,4) np.ndarray
+        * affine : np.ndarray, shape=(4,4)
             Affine transformation matrix.
         * header : MGHHeader
             Header information.
@@ -114,7 +114,7 @@ def load_roi(file_in):
 
     Returns
     -------
-    (N,) np.ndarray
+    np.ndarray, shape=(N,)
         Array of vertex indices in ROI.
 
     """
@@ -164,9 +164,9 @@ def save_overlay(file_out, arr, affine=None, header=None):
     ----------
     file_out : str
         File name of output file.
-    arr : (N,) np.ndarray
+    arr : np.ndarray, shape=(N,)
         Overlay data.
-    affine : (4,4) np.ndarray, optional
+    affine : np.ndarray, shape=(4,4), optional
         Affine transformation matrix.
     header : MGHHeader, optional
         Header information.
@@ -218,9 +218,9 @@ def save_meshlines(file_out, vtx_start, vtx_end):
     ----------
     file_out : str
         File name of output file.
-    vtx_start : ndarray
+    vtx_start : np.ndarray, shape=(N,3)
         Array of meshline start points.
-    vtx_end : ndarray
+    vtx_end : np.ndarray, shape=(N,3)
         Array of meshline end points.
 
     Returns
