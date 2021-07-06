@@ -70,11 +70,11 @@ class Filter:
             Geodesic distance to origin.
         ang : np.ndarray, shape=(N,)
             Polar angle.
-        v0 : np.ndarray, shape=(3,)
-            Vertex coordinates of the coordinate system origin.
-        v1 : np.ndarray, shape=(3,)
-            Vertex coordinates pointing to one 1-ring neighbor for polar angle
-            coordinates.
+        src : int
+            Vertex index which was used as origin for geodesic distances.
+        tar : int
+            Vertex index of one 1-ring neighbor which was used as origin for
+            polar angle coordinates.
 
         References
         -------
@@ -86,10 +86,12 @@ class Filter:
 
         r = np.zeros(len(self.vtx))
         r[self.roi] = np.nan_to_num(self.dist[i])
+
         src = self.roi[i]
+        tar = self.mesh_neighborhood(src)[0]
 
         g, _ = self._gradient(r)
-        v = self.vtx[self.mesh.neighborhood(src)[0], :] - self.vtx[src, :]
+        v = self.vtx[tar, :] - self.vtx[src, :]
         v /= np.linalg.norm(v)
 
         n_target = np.zeros_like(self.n)
@@ -106,10 +108,7 @@ class Filter:
         gv1 = np.einsum('...ij,...j', m, g)
         ang = self._angle_between_vectors(gv1, v_target, n_target)
 
-        v0 = self.vtx[src]
-        v1 = v
-
-        return r, ang, v0, v1
+        return r, ang, src, tar
 
     def generate_wavelet(self, r, ang, sigma=1.0, length=1.0, ori=0, hull=0.1):
         """Complex-valued Gabor filter. [1] The amplitude is set to 1 and the
@@ -176,8 +175,7 @@ class Filter:
             DataFrame collecting the output under the following columns
 
             * ind (U,) : Vertex index.
-            * v0 (U,3) : Vertex.
-            * v1 (U,3) : Neighbor Vertex for spanning the coordinate system.
+            * ind1 (U,) : Vertex index of one 1-ring neighbor.
             * y_real (U,) : Real part of filtered response.
             * y_imag (U,) : Imaginary part of filtered response.
             * lambda (U,) : Best wavelength.
@@ -198,8 +196,7 @@ class Filter:
 
         data = {
             'ind': [res[i][0] for i, _ in enumerate(res)],
-            'v0': [res[i][1] for i, _ in enumerate(res)],
-            'v1': [res[i][2] for i, _ in enumerate(res)],
+            'ind1': [res[i][1] for i, _ in enumerate(res)],
             'y_real': [np.real(res[i][3]) for i, _ in enumerate(res)],
             'y_imag': [np.imag(res[i][3]) for i, _ in enumerate(res)],
             'lambda': [res[i][4] for i, _ in enumerate(res)],
@@ -240,8 +237,8 @@ class Filter:
 
         """
 
-        r, phi, v0, v1 = self.get_coordinates(i)
-        tmp = filt = wave = ori = 0
+        r, phi, ind, ind1 = self.get_coordinates(i)
+        tmp = resp = wave = ori = 0
         for m, n in list(itertools.product(params['lambda'],
                                            params['ori'])):
             y = self.generate_wavelet(r, phi, params['sigma'], m, n,
@@ -250,11 +247,11 @@ class Filter:
             tmp2 = np.abs(y_conv)
             if tmp2 > tmp:
                 tmp = tmp2
-                filt = y_conv
+                resp = y_conv
                 wave = m
                 ori = n
 
-        return [self.roi[i], v0, v1+v0, filt, wave, ori]
+        return [ind, ind1, resp, wave, ori]
 
     @staticmethod
     def convolution(arr_kernel, arr):
@@ -279,14 +276,14 @@ class Filter:
 
         return np.sum(arr_kernel * arr) / len(arr_kernel[arr_kernel != 0])
 
-    def _gradient(self, arr_s):
+    def _gradient(self, arr):
         """Compute vertex-wise gradients of a scalar field sampled on a
         triangular mesh. The calculation is taken from [1].
 
         Parameters
         ----------
-        arr_s : np.ndarray, shape=(N,)
-            Vertex-wose scalar field.
+        arr : np.ndarray, shape=(N,)
+            Vertex-wise scalar field.
 
         Returns
         -------
@@ -307,8 +304,8 @@ class Filter:
         arr_n = mesh.face_normals
 
         # face-wise gradient
-        gf_ji = arr_s[self.fac[:, 1]] - arr_s[self.fac[:, 0]]
-        gf_ki = arr_s[self.fac[:, 2]] - arr_s[self.fac[:, 0]]
+        gf_ji = arr[self.fac[:, 1]] - arr[self.fac[:, 0]]
+        gf_ki = arr[self.fac[:, 2]] - arr[self.fac[:, 0]]
 
         v_ik = self.vtx[self.fac[:, 0], :] - self.vtx[self.fac[:, 2], :]
         v_ji = self.vtx[self.fac[:, 1], :] - self.vtx[self.fac[:, 0], :]

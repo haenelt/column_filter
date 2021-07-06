@@ -37,3 +37,7 @@ print("-----------------------------------------------------------------------")
 # lambda
 # ori
 # phase
+# and config stuff
+
+# write overlay
+# print out expected value
