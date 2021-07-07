@@ -5,10 +5,9 @@ import os
 import numpy as np
 import nibabel as nb
 from nibabel.freesurfer.mghformat import MGHHeader
-from nibabel.freesurfer.io import read_geometry, write_geometry, read_label
+from nibabel.freesurfer.io import read_geometry, read_label
 
-__all__ = ['load_mesh', 'load_overlay', 'load_roi', 'load_mmap', 'save_overlay',
-           'save_meshlines']
+__all__ = ['load_mesh', 'load_overlay', 'load_roi', 'load_mmap', 'save_overlay']
 
 
 def load_mesh(file_in):
@@ -208,42 +207,3 @@ def save_overlay(file_out, arr, affine=None, header=None):
     # write output
     output = nb.Nifti1Image(arr, affine, header)
     nb.save(output, file_out)
-
-
-def save_meshlines(file_out, vtx_start, vtx_end):
-    """Write a surface mesh of lines between start and end vertex coordinates to
-    disk. Currently, only meshs in freesurfer file format are supported.
-
-    Parameters
-    ----------
-    file_out : str
-        File name of output file.
-    vtx_start : np.ndarray, shape=(N,3)
-        Array of meshline start points.
-    vtx_end : np.ndarray, shape=(N,3)
-        Array of meshline end points.
-
-    Returns
-    -------
-    None.
-
-    """
-
-    # initialise face with line shape
-    f_new = np.array([-2, -1, -2])
-    f_iter = 2
-
-    v_res = []
-    f_res = []
-    for v1, v2 in zip(vtx_start, vtx_end):
-
-        # update vertex list
-        v_res.append(v1)
-        v_res.append(v2)
-
-        # update face list
-        f_new = [x + f_iter for x in f_new]
-        f_res.append(f_new)
-
-    # write output geometry
-    write_geometry(file_out, np.asarray(v_res), np.asarray(f_res))
