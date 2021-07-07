@@ -4,6 +4,7 @@
 import functools
 import numpy as np
 from scipy.sparse import csr_matrix
+from .util import normalize_array
 
 __all__ = ['Mesh']
 
@@ -120,7 +121,7 @@ class Mesh:
         # calculate the normal for all triangles by taking the cross product of
         # the vectors v1-v0 and v2-v0 in each triangle and normalize
         n = np.cross(tris[::, 1] - tris[::, 0], tris[::, 2] - tris[::, 0])
-        n = self._normalize(n)
+        n = normalize_array(n)
 
         return n
 
@@ -146,7 +147,7 @@ class Mesh:
 
         # calculate vertex-wise normals from face normals and normalize
         n = self._f2v(n)
-        n = self._normalize(n)
+        n = normalize_array(n)
 
         return n
 
@@ -206,33 +207,6 @@ class Mesh:
         """
 
         return self.vfm.dot(nf_arr)
-
-    @staticmethod
-    def _normalize(arr):
-        """Normalize a numpy array of shape=(n,3) along axis=1.
-
-        Parameters
-        ----------
-        arr : np.ndarray, shape=(N,3)
-            Data array
-
-        Returns
-        -------
-        res : np.ndarray, shape=(N,3)
-            Normalized data array.
-
-        """
-
-        lens = np.sqrt(arr[:, 0] ** 2 + arr[:, 1] ** 2 + arr[:, 2] ** 2)
-        lens[lens == 0] = np.nan
-        res = np.zeros_like(arr)
-        res[:, 0] = arr[:, 0] / lens
-        res[:, 1] = arr[:, 1] / lens
-        res[:, 2] = arr[:, 2] / lens
-        res_sum = np.sum(res, axis=1)
-        res[~np.isfinite(res_sum), :] = 0
-
-        return res
 
     @property
     def vtx(self):

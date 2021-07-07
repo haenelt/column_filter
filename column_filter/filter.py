@@ -10,6 +10,7 @@ from surfdist.analysis import dist_calc
 from tqdm import tqdm
 from joblib import Parallel, delayed
 from .mesh import Mesh
+from .util import normalize_array
 from .config import NUM_CORES, wavelet_params
 
 __all__ = ['Filter', 'dist_matrix']
@@ -345,7 +346,7 @@ class Filter:
         gv_magn = norm(gv, axis=1)
 
         # normalize
-        gv = self._normalize(gv)
+        gv = normalize_array(gv)
 
         return gv, gv_magn
 
@@ -376,33 +377,6 @@ class Filter:
         gv[:, 2] /= magn
 
         return gv
-
-    @staticmethod
-    def _normalize(arr):
-        """Normalize a numpy array of shape=(n,3) along axis=1.
-
-        Parameters
-        ----------
-        arr : np.ndarray, shape=(N,3)
-            Data array
-
-        Returns
-        -------
-        res : np.ndarray, shape=(N,3)
-            Normalized data array.
-
-        """
-
-        lens = np.sqrt(arr[:, 0] ** 2 + arr[:, 1] ** 2 + arr[:, 2] ** 2)
-        lens[lens == 0] = np.nan
-        res = np.zeros_like(arr)
-        res[:, 0] = arr[:, 0] / lens
-        res[:, 1] = arr[:, 1] / lens
-        res[:, 2] = arr[:, 2] / lens
-        res_sum = np.sum(res, axis=1)
-        res[~np.isfinite(res_sum), :] = 0
-
-        return res
 
     @staticmethod
     def _rotation_matrix(f, t):

@@ -3,6 +3,7 @@
 
 import multiprocessing
 import numpy as np
+from .util import linear_scale, log_scale
 
 
 # Constants
@@ -21,9 +22,7 @@ lambda_max = 8.0  # largest wavelength
 hull_min = 0.1  # cutoff value of gaussian hull
 
 wavelet_params = {'sigma': sigma,
-                  'lambda': np.logspace(np.log(lambda_min),
-                                        np.log(lambda_max),
-                                        n_lambda, base=np.e),
-                  'ori': np.linspace(0, np.pi-np.pi/n_theta, n_theta),
+                  'lambda': log_scale(lambda_min, lambda_max, n_lambda),
+                  'ori': linear_scale(0, np.pi-np.pi/n_theta, n_theta),
                   'hull': hull_min,
                   }
