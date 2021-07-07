@@ -88,7 +88,7 @@ class Filter:
         r[self.roi] = np.nan_to_num(self.dist[i])
 
         src = self.roi[i]
-        tar = self.mesh_neighborhood(src)[0]
+        tar = self.mesh.neighborhood(src)[0]
 
         g, _ = self._gradient(r)
         v = self.vtx[tar, :] - self.vtx[src, :]
@@ -155,15 +155,16 @@ class Filter:
 
         return np.nan_to_num(y)
 
-    def fit(self, arr, file_out=None, **params):
-        """Fit filter bank to data array in ROI. For each point, the parameters
+    def fit(self, data, file_out=None, **params):
+        """Fit filter bank to data array in ROI. For each data point, parameters
         for the wavelet with the highest response are stored in a pandas
         dataframe.
 
         Parameters
         ----------
-        arr : np.ndarray, shape=(N,)
-            Data array.
+        data : np.ndarray, shape=(N,M)
+            Multidimensional data array. Optionally, M different data arrays can
+            be processed in one function call.
         file_out : str
             File name of saved pandas dataframe in apache parquet format.
         params : dict
@@ -174,12 +175,13 @@ class Filter:
         pd.DataFrame
             DataFrame collecting the output under the following columns
 
-            * ind (U,) : Vertex index.
-            * ind1 (U,) : Vertex index of one 1-ring neighbor.
-            * y_real (U,) : Real part of filtered response.
-            * y_imag (U,) : Imaginary part of filtered response.
-            * lambda (U,) : Best wavelength.
-            * ori (U,) : Best orientation.
+            * n (U*M,) : Array index for multidimensional data array.
+            * ind (U*M,) : Vertex index.
+            * ind1 (U*M,) : Vertex index of one 1-ring neighbor.
+            * y_real (U*M,) : Real part of filtered response.
+            * y_imag (U*M,) : Imaginary part of filtered response.
+            * lambda (U*M,) : Best wavelength.
+            * ori (U*M,) : Best orientation.
 
         """
 
@@ -189,22 +191,27 @@ class Filter:
         res = Parallel(n_jobs=NUM_CORES)(
             delayed(self._fit)(
                 i,
-                arr,
+                data,
                 params,
                 ) for i in tqdm(range(len(self.roi)))
         )
 
-        data = {
-            'ind': [res[i][0] for i, _ in enumerate(res)],
-            'ind1': [res[i][1] for i, _ in enumerate(res)],
-            'y_real': [np.real(res[i][3]) for i, _ in enumerate(res)],
-            'y_imag': [np.imag(res[i][3]) for i, _ in enumerate(res)],
-            'lambda': [res[i][4] for i, _ in enumerate(res)],
-            'ori': [res[i][5] for i, _ in enumerate(res)],
+        # shape of multidimensional data array
+        r_data = range(np.shape(data)[0])
+        r_dim = range(np.shape(data)[1])
+
+        summary = {
+            'n': [i for i in r_dim for _ in r_data],
+            'ind': [res[i][0] for _ in r_dim for i in r_data],
+            'ind1': [res[i][1] for _ in r_dim for i in r_data],
+            'y_real': [np.real(res[i][2][j]) for j in r_dim for i in r_data],
+            'y_imag': [np.imag(res[i][2][j]) for j in r_dim for i in r_data],
+            'lambda': [res[i][3][j] for j in r_dim for i in r_data],
+            'ori': [res[i][4][j] for j in r_dim for i in r_data],
         }
 
         # create pandas dataframe
-        df = pd.DataFrame(data=data)
+        df = pd.DataFrame(data=summary)
 
         if file_out:
             dir_out = os.path.dirname(file_out)
@@ -215,7 +222,7 @@ class Filter:
 
         return df
 
-    def _fit(self, i, arr, params):
+    def _fit(self, i, data, params):
         """Helper function used by .fit() to run the fitting procedure on
         multiple CPUs in parallel using joblib. Only parameter for the wavelet
         with the largest response are returned which corresponds to a hard
@@ -225,8 +232,9 @@ class Filter:
         ----------
         i : int
             Array index in ROI.
-        arr : np.ndarray, shape=(N,)
-            Data array.
+        data : np.ndarray, shape=(N,M)
+            Multidimensional data array. Optionally, M different data arrays can
+            be processed in one function call.
         params : dict
             Further optional parameters to change default settings.
 
@@ -238,18 +246,28 @@ class Filter:
         """
 
         r, phi, ind, ind1 = self.get_coordinates(i)
-        tmp = resp = wave = ori = 0
-        for m, n in list(itertools.product(params['lambda'],
-                                           params['ori'])):
+        r_dim = range(data.ndim)
+
+        tmp = [0.0 for _ in r_dim]
+        resp = [0.0 for _ in r_dim]
+        wave = [0.0 for _ in r_dim]
+        ori = [0.0 for _ in r_dim]
+
+        if data.ndim == 1:
+            data = np.expand_dims(data, axis=1)
+
+        for m, n in list(itertools.product(params['lambda'], params['ori'])):
             y = self.generate_wavelet(r, phi, params['sigma'], m, n,
                                       params['hull'])
-            y_conv = self.convolution(y, arr)
-            tmp2 = np.abs(y_conv)
-            if tmp2 > tmp:
-                tmp = tmp2
-                resp = y_conv
-                wave = m
-                ori = n
+
+            y_conv = [self.convolution(y, data[:, j]) for j in r_dim]
+            tmp2 = [np.abs(j) for j in y_conv]
+            for j in r_dim:
+                if tmp2[j] > tmp[j]:
+                    tmp[j] = tmp2[j]
+                    resp[j] = y_conv[j]
+                    wave[j] = m
+                    ori[j] = n
 
         return [ind, ind1, resp, wave, ori]
 
