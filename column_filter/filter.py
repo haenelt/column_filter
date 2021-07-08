@@ -189,29 +189,29 @@ class Filter:
         # set default arguments if no parameters are given
         params = {**wavelet_params, **params}
 
-        res = Parallel(n_jobs=NUM_CORES, verbose=0)(
-            delayed(self._fit)(
-                i,
-                data,
-                params,
-                ) for i in tqdm(range(len(self.roi)))
-        )
-
         # shape of multidimensional data array
-        r_data = range(np.shape(data)[0])
+        r_roi = range(len(self.roi))
         if data.ndim == 1:
             r_dim = range(1)
         else:
             r_dim = range(np.shape(data)[1])
 
+        res = Parallel(n_jobs=NUM_CORES, verbose=0)(
+            delayed(self._fit)(
+                i,
+                data,
+                params,
+                ) for i in tqdm(r_roi)
+        )
+
         summary = {
-            'n': [i for i in r_dim for _ in r_data],
-            'ind': [res[i][0] for _ in r_dim for i in r_data],
-            'ind1': [res[i][1] for _ in r_dim for i in r_data],
-            'y_real': [np.real(res[i][2][j]) for j in r_dim for i in r_data],
-            'y_imag': [np.imag(res[i][2][j]) for j in r_dim for i in r_data],
-            'lambda': [res[i][3][j] for j in r_dim for i in r_data],
-            'ori': [res[i][4][j] for j in r_dim for i in r_data],
+            'n': [i for i in r_dim for _ in r_roi],
+            'ind': [res[i][0] for _ in r_dim for i in r_roi],
+            'ind1': [res[i][1] for _ in r_dim for i in r_roi],
+            'y_real': [np.real(res[i][2][j]) for j in r_dim for i in r_roi],
+            'y_imag': [np.imag(res[i][2][j]) for j in r_dim for i in r_roi],
+            'lambda': [res[i][3][j] for j in r_dim for i in r_roi],
+            'ori': [res[i][4][j] for j in r_dim for i in r_roi],
         }
 
         # create pandas dataframe
@@ -250,15 +250,15 @@ class Filter:
         """
 
         r, phi, ind, ind1 = self.get_coordinates(i)
-        r_dim = range(data.ndim)
+
+        if data.ndim == 1:
+            data = np.expand_dims(data, axis=1)
+        r_dim = range(np.shape(data)[1])
 
         tmp = [0.0 for _ in r_dim]
         resp = [0.0 for _ in r_dim]
         wave = [0.0 for _ in r_dim]
         ori = [0.0 for _ in r_dim]
-
-        if data.ndim == 1:
-            data = np.expand_dims(data, axis=1)
 
         for m, n in list(itertools.product(params['lambda'], params['ori'])):
             y = self.generate_wavelet(r, phi, params['sigma'], m, n,
