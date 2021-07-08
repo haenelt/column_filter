@@ -19,8 +19,7 @@ After the installation you should be able to import the package with `import col
 ```python
 import numpy as np
 from column_filter.io import load_roi, load_mesh, load_mmap, load_overlay
-from column_filter.filter import Filter
-
+from column_filter.filt import Filter
 
 # calculate distance
 surf_in = "/home/daniel/Schreibtisch/data2/lh.cortex"
@@ -44,7 +43,7 @@ bla = filter.fit(arr, file_out="/home/daniel/Schreibtisch/test.parquet")
 ```python
 import numpy as np
 from column_filter.io import load_roi, load_mesh, save_overlay, load_mmap
-from column_filter.filter import Filter
+from column_filter.filt import Filter
 from column_filter.config import wavelet_params
 
 # calculate distance
@@ -69,7 +68,7 @@ for i in sf:
                               0, 0.1)
 
     A = np.real(A)
-    save_overlay("/home/daniel/Schreibtisch/bla_"+str(i)+"_.mgh", A)
+    save_overlay("/home/daniel/Schreibtisch/bla_" + str(i) + "_.mgh", A)
 ```
 
 ## Acknowledgements

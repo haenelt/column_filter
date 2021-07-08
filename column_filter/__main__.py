@@ -8,7 +8,7 @@ import column_filter
 from .io import load_roi, load_mesh, load_mmap, load_overlay, save_overlay
 from .config import wavelet_params
 from .util import linear_scale, log_scale
-from .filter import Filter
+from .filt import Filter
 
 
 # description
@@ -26,7 +26,7 @@ r_help = "file name of input region of interest. The file is expected to be " \
          "in freesurfer label format."
 d_help = "file name of input distance matrix. The file is expected to be a " \
          "memory-mapped numpy array which can be computed beforehand with " \
-         "the function column_filter.filter.dist_matrix()."
+         "the function column_filter.filt.dist_matrix()."
 i_help = "file name of input overlay. The file is expected to be a " \
          "freesurfer overlay (*.mgh)."
 o_help = "file name of written output overlay (*.mgh). The file contains the " \
