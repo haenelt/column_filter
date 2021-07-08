@@ -189,7 +189,7 @@ class Filter:
         # set default arguments if no parameters are given
         params = {**wavelet_params, **params}
 
-        res = Parallel(n_jobs=NUM_CORES)(
+        res = Parallel(n_jobs=NUM_CORES, verbose=0)(
             delayed(self._fit)(
                 i,
                 data,
@@ -199,7 +199,10 @@ class Filter:
 
         # shape of multidimensional data array
         r_data = range(np.shape(data)[0])
-        r_dim = range(np.shape(data)[1])
+        if data.ndim == 1:
+            r_dim = range(1)
+        else:
+            r_dim = range(np.shape(data)[1])
 
         summary = {
             'n': [i for i in r_dim for _ in r_data],
