@@ -1,4 +1,9 @@
 # Column filter
+
+<p align="center">
+  <img src="https://github.com/haenelt/GBB/blob/master/gbb_logo.gif?raw=true" width=75% height=75% alt="Illustration of GBB"/>
+</p>
+
 Cortical columns are often thought as the fundamental building blocks for cortical information processing (but see).
 
 [[1]](#1)
