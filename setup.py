@@ -12,6 +12,7 @@ INSTALL_REQUIREMENTS = ['numpy==1.19.1',
                         'scipy==1.5.2',
                         'tqdm==4.61.1',
                         'pyarrow==4.0.1',
+                        'cython==0.29.24',
                         ]
 
 CLASSIFIERS = ["Programming Language :: Python :: 3.8",
