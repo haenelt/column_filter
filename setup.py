@@ -3,15 +3,15 @@
 import setuptools
 
 
-INSTALL_REQUIREMENTS = ['numpy==1.19.1',
-                        'pandas==1.2.4',
-                        'nibabel==3.2.1',
-                        'gdown==3.13.0',
-                        'joblib==0.17.0',
+INSTALL_REQUIREMENTS = ['numpy==1.23.5',
+                        'pandas==1.5.2',
+                        'nibabel==4.0.2',
+                        'gdown==4.6.0',
+                        'joblib==1.2.0',
                         'surfdist==0.15.5',
-                        'scipy==1.5.2',
-                        'tqdm==4.61.1',
-                        'pyarrow==4.0.1',
+                        'scipy==1.9.3',
+                        'tqdm==4.64.1',
+                        'pyarrow==10.0.1',
                         ]
 
 CLASSIFIERS = ["Programming Language :: Python :: 3.8",
