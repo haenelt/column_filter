@@ -4,5 +4,14 @@
 # jupyter notebook
 *.ipynb_checkpoints
 
+# vscode project directory
+*.vscode
+
 # pycharm project directory
 *.idea
+
+# packaging
+build/
+dist/
+.eggs/
+*.egg-info/
